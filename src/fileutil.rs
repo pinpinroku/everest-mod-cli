@@ -64,7 +64,7 @@ pub fn read_manifest_file_from_zip(zip_path: &Path) -> Result<Option<Vec<u8>>, E
             Ok(Some(buffer))
         }
         Err(ZipError::FileNotFound) => Ok(None),
-        Err(err) => Err(Error::Io(err.into())), // FIXME: Return ZipError
+        Err(err) => Err(Error::Zip(err)),
     }
 }
 
