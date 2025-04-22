@@ -23,19 +23,20 @@
 //!
 //! ```rust
 //! # async fn example() -> Result<(), Error> {
-//! let download_dir = Path::new("/path/to/downloads");
-//! let mod_downloader = ModDownloader::new(download_dir);
+//!     let download_dir = Path::new("/path/to/downloads");
+//!     let mod_downloader = ModDownloader::new(download_dir);
 //!
-//! // Fetch the mod registry
-//! let registry_data = mod_downloader.fetch_mod_registry().await?;
+//!     // Fetch the mod registry
+//!     let registry_data = mod_downloader.fetch_mod_registry().await?;
 //!
-//! // Download a mod file
-//! let mod_url = "https://example.com/modfile.zip";
-//! let mod_name = "ExampleMod";
-//! let expected_hashes = vec!["abcdef1234567890".to_string()];
-//! mod_downloader.download_mod(mod_url, mod_name, &expected_hashes).await?;
+//!     // Download a mod file
+//!     let mod_url = "https://example.com/modfile.zip";
+//!     let mod_name = "ExampleMod";
+//!     let expected_hashes = vec!["abcdef1234567890".to_string()];
+//!     mod_downloader.download_mod(mod_url, mod_name, &expected_hashes).await?;
 //!
-//! # Ok(()) }
+//!     Ok(())
+//!  }
 //! ```
 //!
 //! Ensure that necessary dependencies such as `reqwest`, `tokio`, and `uuid` are included
@@ -109,8 +110,7 @@ impl ModDownloader {
         name: &str,
         expected_hash: &[String],
     ) -> Result<(), Error> {
-        info!("Start downloading mod: {}", name);
-        println!("\nUpdating {}:", name);
+        println!("\nDownloading {}:", name);
 
         let response = self.client.get(url).send().await?.error_for_status()?;
         info!("Status code: {:#?}", response.status());
