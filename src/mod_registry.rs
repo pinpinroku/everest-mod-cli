@@ -37,21 +37,18 @@ impl RemoteModInfo {
     /// Checks if the provided hash matches any of the expected checksums.
     ///
     /// # Arguments
-    ///
     /// * `computed_hash` - The hash to check against the mod's checksums.
     ///
     /// # Returns
-    ///
     /// Returns `true` if the hash matches any of the checksums, otherwise `false`.
     pub fn has_matching_hash(&self, computed_hash: &str) -> bool {
-        // Check if the computed hash exists in the list of expected checksums
         self.checksums
             .iter()
             .any(|checksum| checksum == computed_hash)
     }
 }
 
-/// Mod Registry: represents the complete `everest_update.yaml` containing all available remote mods
+/// Represents the complete `everest_update.yaml` containing all available remote mods
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ModRegistry {
     #[serde(flatten)]
@@ -59,7 +56,7 @@ pub struct ModRegistry {
 }
 
 impl ModRegistry {
-    /// Initialize ModRegistry instance from raw data
+    /// Initialize ModRegistry instance from raw binary data
     pub async fn from(data: Bytes) -> Result<Self, serde_yaml_ng::Error> {
         info!("Parsing remote mod registry data");
         let mut mod_registry: Self = serde_yaml_ng::from_slice(&data)?;
@@ -74,7 +71,7 @@ impl ModRegistry {
 
     /// Search for mods
     pub fn search(&self, query: &str) -> Vec<&RemoteModInfo> {
-        info!("Searching remote mod registry for mod: {}", query);
+        info!("Searching remote mod registry for the mod: {}", query);
         self.entries
             .values()
             .filter(|mod_info| mod_info.name.to_lowercase().contains(&query.to_lowercase()))
@@ -83,7 +80,7 @@ impl ModRegistry {
 
     /// Get mod information
     pub fn get_mod_info(&self, name: &str) -> Option<&RemoteModInfo> {
-        info!("Getting remote mod information for mod: {}", name);
+        info!("Getting remote mod information for the mod: {}", name);
         self.entries.get(name)
     }
 }

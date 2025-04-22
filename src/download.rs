@@ -1,3 +1,45 @@
+//! # Download Module
+//!
+//! This module provides functionality for downloading mods and working
+//! with mod metadata. It includes the primary structures and functions
+//! for fetching the mod registry, downloading mod files, verifying checksums,
+//! and determining appropriate filenames based on URL metadata and HTTP headers.
+//!
+//! ## Key Components
+//!
+//! - **ModDownloader**: A struct that manages mod downloads and registry fetching.
+//! - **download_mod**: An async method that downloads a mod file, shows a progress bar,
+//!   computes an xxHash checksum, and verifies the integrity of the downloaded file.
+//! - **fetch_mod_registry**: Fetches the remote mod registry as raw bytes.
+//! - **util Module**: Contains utility functions such as `determine_filename`,
+//!   which extracts or generates a filename based on URL and ETag header metadata.
+//!
+//! ## Usage
+//!
+//! The module can be used to fetch and download mods from a remote registry,
+//! verify file integrity using checksums, and determine a filename for storage.
+//!
+//! For example:
+//!
+//! ```rust
+//! # async fn example() -> Result<(), Error> {
+//! let download_dir = Path::new("/path/to/downloads");
+//! let mod_downloader = ModDownloader::new(download_dir);
+//!
+//! // Fetch the mod registry
+//! let registry_data = mod_downloader.fetch_mod_registry().await?;
+//!
+//! // Download a mod file
+//! let mod_url = "https://example.com/modfile.zip";
+//! let mod_name = "ExampleMod";
+//! let expected_hashes = vec!["abcdef1234567890".to_string()];
+//! mod_downloader.download_mod(mod_url, mod_name, &expected_hashes).await?;
+//!
+//! # Ok(()) }
+//! ```
+//!
+//! Ensure that necessary dependencies such as `reqwest`, `tokio`, and `uuid` are included
+//! in your Cargo.toml.
 use bytes::Bytes;
 use futures_util::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -9,7 +51,7 @@ use xxhash_rust::xxh64::Xxh64;
 
 use crate::{constant::MOD_REGISTRY_URL, error::Error};
 
-/// Manage mod downloads
+/// Manages mod downloads and registry fetching.
 #[derive(Debug, Clone)]
 pub struct ModDownloader {
     client: Client,
@@ -18,6 +60,13 @@ pub struct ModDownloader {
 }
 
 impl ModDownloader {
+    /// Creates a new `ModDownloader` with the specified download directory.
+    ///
+    /// # Parameters
+    /// - `download_dir`: The directory where downloaded mods will be stored.
+    ///
+    /// # Returns
+    /// A new instance of `ModDownloader`.
     pub fn new(download_dir: &Path) -> Self {
         Self {
             client: Client::new(),
@@ -26,7 +75,11 @@ impl ModDownloader {
         }
     }
 
-    /// Fetch remote mod registry, returns bytes of response
+    /// Fetches the remote mod registry.
+    ///
+    /// # Returns
+    /// - `Ok(Bytes)`: The raw bytes of the registry file upon success.
+    /// - `Err(Error)`: An error if the request or parsing fails.
     pub async fn fetch_mod_registry(&self) -> Result<Bytes, Error> {
         info!("Fetching remote mod registry...");
         let response = self.client.get(&self.registry_url).send().await?;
@@ -34,7 +87,22 @@ impl ModDownloader {
         Ok(yaml_data)
     }
 
-    /// Download mod file and verify checksum
+    /// Downloads a mod file from the given URL, saves it locally, and verifies its integrity.
+    ///
+    /// # Parameters
+    /// - `url`: The URL to download the mod from.
+    /// - `name`: The mod's name (used for logging and display).
+    /// - `expected_hash`: Slice of acceptable xxHash checksum strings (in hexadecimal).
+    ///
+    /// # Behavior
+    /// 1. Sends an HTTP GET request to download the file.
+    /// 2. Determines the filename from the response and creates a local file.
+    /// 3. Streams the file to disk, updating a progress bar and computing its xxHash.
+    /// 4. Verifies the computed checksum against the provided expected hash values.
+    ///    - If verification fails, the file is removed and an `InvalidChecksum` error is returned.
+    ///
+    /// # Returns
+    /// Returns `Ok(())` if the download and checksum verification succeed, otherwise returns an appropriate `Error`.
     pub async fn download_mod(
         &self,
         url: &str,
@@ -42,13 +110,14 @@ impl ModDownloader {
         expected_hash: &[String],
     ) -> Result<(), Error> {
         info!("Start downloading mod: {}", name);
+        println!("\nUpdating {}:", name);
 
         let response = self.client.get(url).send().await?.error_for_status()?;
-        info!("Status code: {}", response.status().as_u16());
+        info!("Status code: {:#?}", response.status());
 
         let filename = util::determine_filename(&response)?;
         let download_path = self.download_dir.join(filename);
-        info!("Destination: {}", download_path.display());
+        info!("Destination: {:#?}", download_path);
 
         let total_size = response.content_length().unwrap_or(0);
         info!("Total file size: {}", total_size);
@@ -76,18 +145,21 @@ impl ModDownloader {
 
         pb.finish_with_message("Download complete");
 
-        // Verify checksum
         let hash = hasher.digest();
         let hash_str = format!("{:016x}", hash);
-        info!("xxhash of downloaded file: {}", hash_str);
+        info!(
+            "Xxhash in u64: {:#?}, formatted string: {:#?}",
+            hash, hash_str
+        );
 
-        println!("\n  Verifying checksum...");
+        // Verify checksum
+        println!("\n🔍 Verifying checksum of the mod '{}'", name);
         if expected_hash.contains(&hash_str) {
-            println!("  Checksum verified!");
+            println!("✅ Checksum verified!");
         } else {
-            println!("  Checksum verification failed!");
+            println!("❌ Checksum verification failed!");
             fs::remove_file(&download_path).await?;
-            println!("  Downloaded file removed");
+            println!("[Cleanup] Downloaded file removed 🗑️");
             return Err(Error::InvalidChecksum {
                 file: download_path,
                 computed: hash_str,
@@ -99,20 +171,26 @@ impl ModDownloader {
     }
 }
 
+/// Utility functions for determining filenames and handling mod download metadata.
 mod util {
     use super::*;
     use reqwest::{Response, Url};
     use uuid::Uuid;
 
-    /// Determines the most appropriate filename for a downloaded mod using URL and metadata
+    /// Determines the most appropriate filename for a downloaded mod using the URL and metadata.
+    ///
+    /// It first attempts to extract the filename from the URL. If that fails, it tries to extract
+    /// the filename from the response’s ETag header. If both methods fail, it generates a random filename.
+    ///
+    /// # Parameters
+    /// - `response`: The HTTP response from which to extract metadata.
+    ///
+    /// # Returns
+    /// - `Ok(String)`: The determined filename.
+    /// - `Err(Error)`: An error if filename extraction fails.
     pub fn determine_filename(response: &Response) -> Result<String, Error> {
-        // Try to extract filename from the URL path.
         let filename_from_url = extract_filename_from_url(response.url());
-
-        // Try to extract filename from the ETag header.
         let filename_from_etag = extract_filename_from_etag(response);
-
-        // Choose the best available filename or generate a random one
         let mod_filename = filename_from_url
             .or(filename_from_etag)
             .unwrap_or_else(|| format!("unknown-mod_{}.zip", Uuid::new_v4()));
@@ -120,14 +198,26 @@ mod util {
         Ok(mod_filename)
     }
 
-    /// Extracts a filename from the last segment of a URL path
+    /// Extracts a filename from the last segment of a URL path.
+    ///
+    /// # Parameters
+    /// - `url`: The URL from which to parse the filename.
+    ///
+    /// # Returns
+    /// An optional filename extracted from the URL.
     fn extract_filename_from_url(url: &Url) -> Option<String> {
         url.path_segments()
             .and_then(|mut segments| segments.next_back().filter(|&segment| !segment.is_empty()))
             .map(String::from)
     }
 
-    /// Creates a filename using the ETag header value, properly formatted with extension
+    /// Extracts a filename from the ETag header, appending a `.zip` extension.
+    ///
+    /// # Parameters
+    /// - `response`: The HTTP response containing headers.
+    ///
+    /// # Returns
+    /// An optional formatted filename based on the ETag value.
     fn extract_filename_from_etag(response: &Response) -> Option<String> {
         response
             .headers()

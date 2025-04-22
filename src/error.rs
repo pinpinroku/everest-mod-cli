@@ -27,7 +27,7 @@ pub enum Error {
         "CRITICAL BUG!! NEVER GONNA HAPPEN!!\
         SINCE PARSING SUCCEEDED!!\n{0:#?}"
     )]
-    NoEntriesInModManifest(VecDeque<ModManifest>),
+    NoEntriesInModManifest(VecDeque<ModManifest>), // FIXME: Needless error
     #[error(
         "Checksum verification failed for '{file}':\
         computed checksum '{computed}' does not match\
@@ -40,6 +40,6 @@ pub enum Error {
     },
     #[error(transparent)]
     Request(#[from] reqwest::Error),
-    #[error("The file is not hashed. It seems developer's fault")]
+    #[error("The file is not hashed. It seems the developer made mistake.")]
     FileIsNotHashed,
 }

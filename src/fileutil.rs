@@ -22,13 +22,13 @@ pub fn get_mods_directory() -> Result<PathBuf, Error> {
         .ok_or(Error::CouldNotDetermineHomeDir)
 }
 
-/// Scans the mods directory and returns a list of all installed mod archive files (.zip)
+/// Scans the mods directory and returns a list of all installed mod archive files.
 pub fn find_installed_mod_archives(mods_directory: &Path) -> Result<Vec<PathBuf>, Error> {
     if !mods_directory.exists() {
         return Err(Error::MissingModsDirectory);
     }
 
-    info!("Scanning installed mod archives in {:?}", mods_directory);
+    info!("Scanning installed mod archives in {:#?}", mods_directory);
 
     let mut mod_archives = Vec::new();
     let entries = fs::read_dir(mods_directory)?;
@@ -63,11 +63,11 @@ pub fn read_manifest_file_from_zip(zip_path: &Path) -> Result<Option<Vec<u8>>, E
             Ok(Some(buffer))
         }
         Err(ZipError::FileNotFound) => Ok(None),
-        Err(err) => Err(Error::Io(err.into())),
+        Err(err) => Err(Error::Io(err.into())), // FIXME: Return ZipError
     }
 }
 
-/// Compute xxhash of a given file, return hexadicimal string
+/// Compute xxhash of a given file, return hexadicimal string.
 pub fn hash_file(file_path: &Path) -> Result<String, Error> {
     let file = std::fs::File::open(file_path)?;
     let mut reader = std::io::BufReader::new(file);

@@ -12,7 +12,7 @@ use cli::{Cli, Commands};
 use download::ModDownloader;
 use installed_mods::{check_updates, list_installed_mods};
 use mod_registry::ModRegistry;
-use tracing::{debug, info};
+use tracing::info;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -28,9 +28,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Application starts");
 
     let cli = Cli::parse();
-    debug!("Command passed: {:#?}", &cli.command);
+    info!("Command passed: {:#?}", &cli.command);
 
-    // Initialize downloader early for list and update commands
     let mods_dir = cli.mods_dir.unwrap_or(fileutil::get_mods_directory()?);
 
     match &cli.command {
@@ -92,7 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             match &cli.command {
                 Commands::Search(args) => {
-                    println!("Searching for mods matching '{}'...", args.query);
+                    println!("Searching for mods matching '{}'", args.query);
                     let results = mod_registry.search(&args.query);
                     if results.is_empty() {
                         println!("No mods found matching the query: '{}'", args.query);
@@ -110,7 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 Commands::Info(args) => {
-                    println!("Looking up information for the mod '{}'...", args.name);
+                    println!("Looking up information for the mod '{}'", args.name);
                     if let Some(mod_info) = mod_registry.get_mod_info(&args.name) {
                         println!("\n{} (version {})", mod_info.name, mod_info.version);
                         println!(" - Updated at: {}", mod_info.updated_at);
@@ -125,7 +124,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 Commands::Install(args) => {
-                    println!("Starting installation of the mod '{}'...", args.name);
+                    println!("Starting installation of the mod '{}'", args.name);
                     if let Some(mod_info) = mod_registry.get_mod_info(&args.name) {
                         println!("Downloading mod files...");
                         downloader
@@ -158,7 +157,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                             for update in available_updates {
                                 let downloader = downloader.clone();
-                                println!("\nUpdating {}:", update.name);
 
                                 let handle = tokio::spawn(async move {
                                     let result = downloader
