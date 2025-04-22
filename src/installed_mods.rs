@@ -7,8 +7,9 @@ use tracing::{info, warn};
 
 use crate::{
     error::Error,
-    fileutil::hash_file,
-    fileutil::{find_installed_mod_archives, read_manifest_file_from_zip},
+    fileutil::{
+        find_installed_mod_archives, hash_file, read_manifest_file_from_zip, read_updater_blacklist,
+    },
     mod_registry::ModRegistry,
 };
 
@@ -163,7 +164,8 @@ pub fn check_updates(
     mods_dir: &Path,
     mod_registry: &ModRegistry,
 ) -> Result<Vec<AvailableUpdateInfo>, Error> {
-    let installed_mods = list_installed_mods(mods_dir)?;
+    let mut installed_mods = list_installed_mods(mods_dir)?;
+    remove_blacklisted_mods(&mut installed_mods, mods_dir)?;
 
     let mut available_updates = Vec::new();
     for mut local_mod in installed_mods {
@@ -189,4 +191,33 @@ pub fn check_updates(
     }
 
     Ok(available_updates)
+}
+
+/// Removes mods whose archive paths match entries in the updater blacklist from the provided vector.
+///
+/// # Arguments
+/// * `installed_mods` - A mutable reference to a vector of installed mods
+/// * `mods_directory` - A reference to the `Path` where the updater blacklist file is stored and mods are located
+///
+/// # Returns
+/// * `Result<(), Error>` - Result indicating success or error during blacklist processing
+fn remove_blacklisted_mods(
+    installed_mods: &mut Vec<LocalModInfo>,
+    mods_directory: &Path,
+) -> Result<(), Error> {
+    let blacklist = read_updater_blacklist(mods_directory)?;
+    if blacklist.is_empty() {
+        return Ok(());
+    }
+
+    // Convert blacklist entries to full paths and store in HashSet for O(1) lookups
+    let blacklisted_paths: std::collections::HashSet<PathBuf> = blacklist
+        .into_iter()
+        .map(|filename| mods_directory.join(filename))
+        .collect();
+
+    // Remove mods whose archive_path matches any blacklisted path
+    installed_mods.retain(|mod_info| !blacklisted_paths.contains(&mod_info.archive_path));
+
+    Ok(())
 }
