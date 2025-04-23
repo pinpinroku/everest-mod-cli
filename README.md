@@ -1,10 +1,10 @@
 # Everest Mod CLI
 
-**WIP**: This project is under development. Expect breaking changes and limited functionality. Use at your own risk.
-
 A command-line interface tool for managing Celeste mods using the maddie480's public online database.
 
-This project currently targets **Linux** installation. The **Flatpak** version is not supported. **MacOS** might work, but it's not guaranteed
+This project currently targets **Linux** installation. **macOS** might work, but it's not guaranteed.
+
+---
 
 ## Table of Contents
 
@@ -17,40 +17,46 @@ This project currently targets **Linux** installation. The **Flatpak** version i
   - [update](#update)
 - [Motivation](#motivation)
 - [Notes](#notes)
-- [Acknowledgments](#acknowledgments)
+- [Bug-Reports](#bug-reports)
 - [License](#license)
+- [Acknowledgments](#acknowledgments)
+- [Contact](#contact)
+
+---
 
 ## Features
 
 - **Seamless Mod Management**: Easily manage mods directly from the terminal.
-- **Install Mods by Name**: No need for Olympus or a web browser—just type the mod name to install.
 - **Comprehensive Mod Listing**: View all installed mods along with their names and versions at a glance.
 - **Installed Mod Details**: Easily check the dependencies of your installed mods for better management.
 - **Automatic Update Checks**: Stay up-to-date with available updates for your installed mods, which can be installed automatically while you play—running in the background!
+- **Install Mods by Name**: No need for Olympus or a web browser—just type the mod name to install.
 - **Asynchronous Downloads**: Experience reduced total download times, lower memory usage, and faster checksum verifications for a smoother experience. 
+
+---
 
 ## Installation
 
-Make sure you have installed [Rust](https://www.rust-lang.org/tools/install) and [Cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html).
+Download the binary from the release page. No extra installation steps is required, just place it in `~/.local/bin`, etc. Then add that directory to the PATH.
 
-Clone the repo and build it yourself using `cargo`.
+### Build yourself
 
-```bash
-git clone https://github.com/pinpinroku/everest-mod-cli.git
-cd everest-mod-cli
-cargo build --release
-```
+1. **Clone the Repository**:
+   ```bash
+   git clone https://github.com/pinpinroku/everest-mod-cli.git
+   cd everest-mod-cli
+   ```
 
-> If your CPU supports the **AVX2** feature, set the flag `RUSTFLAGS='-C target-feature=+avx2'` before building to accelerate hash calculation speed. You can check whether your CPU supports **AVX2** by running `lscpu | grep avx2`.
+2. **Build the Project** (requires [Rust](https://www.rust-lang.org/) installed):
+   ```bash
+   cargo build --release
+   ```
 
-Then symlink the binary to the local bin directory.
-
-```bash
-mkdir -p ~/.local/bin/
-ln -s $HOME/everest-mod-cli/target/release/everest-mod-cli $HOME/.local/bin/everest-mod-cli
-```
-
-> We plan to release the built binary files once the specifications are finalized (stabilized).
+3. **Run the CLI**:
+   ```bash
+   ./target/release/everest-mod-cli
+   ```
+---
 
 ## Usage
 
@@ -103,7 +109,7 @@ Install a mod by its name. The mod will be downloaded and installed in the appro
 Checksum verification is performed automatically to ensure the integrity of the downloaded mod.
 ```bash
 everest-mod-cli install "SpeedrunTool"
-# Starting installation of the mod 'SpeedrunTool'...
+# Starting installation of the mod 'SpeedrunTool'
 # Downloading mod files...
 #   [00:00:08] [################################################] 245.41 KiB/245.41 KiB (0s)
 # Verifying checksum...
@@ -158,6 +164,8 @@ everest-mod-cli --mods-dir /home/maddy/game/exokgames/celeste/Mods/ install "Spe
 ```
 > The directory should have permissions of at least 0700.
 
+---
+
 ## Motivation
 
 Everest and Olympus are excellent tools for managing Celeste mods. However, there are still some quality-of-life improvements that could be made:
@@ -167,8 +175,10 @@ Everest and Olympus are excellent tools for managing Celeste mods. However, ther
   - CLI tools like `curl` or `wget` are sometimes faster than in-game downloads.
   - Cannot run auto updates on background.
   - Need to wait or entirely cancel the updates when opening the game.
-- No option to *cancel*, *pause*, or *resume* downloads in mod menu.
+- No option to *cancel*, *pause*, or *resume* downloads in the in-game mod menu to resolve missing dependencies.
 - Lack of clarity about `dependencies` when uninstalling mods.
+
+---
 
 ## Notes
 
@@ -176,10 +186,28 @@ Everest and Olympus are excellent tools for managing Celeste mods. However, ther
 - The `mod_name` refers to the name of the Mod as it appears in the game menu.
 - The `filename` is the name of the zip file that contains the Mod's assets and the manifest file called `everest.yaml`.
 
+---
+
+## Bug Reports
+
+If you encounter any issues or bugs, please open an issue using the bug report template:
+
+[Submit Bug Report](https://github.com/pinpinroku/everest-mod-cli/issues/new?assignees=&labels=&template=bug_report.md&title=)
+
+---
+
+## License
+
+This project is licensed under the [MIT License](https://github.com/pinpinroku/everest-mod-cli/blob/main/LICENSE).
+
+---
+
 ## Acknowledgments
 
 This project was made possible thanks to the [EverestUpdateCheckerServer](https://github.com/maddie480/EverestUpdateCheckerServer) hosted by [maddie480](https://github.com/maddie480). We're grateful for their work, which has been instrumental in the development of this project.
 
-## License
+---
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## Contact
+
+For questions or support, reach out via email or open a discussion in the [Discussions tab](https://github.com/pinpinroku/everest-mod-cli/discussions/new?category=q-a).
