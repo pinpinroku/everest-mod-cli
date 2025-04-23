@@ -66,12 +66,13 @@ If you're unfamiliar with Gitmoji or prefer using plain text commit messages, th
 
 ## Code Guidelines
 
-- **Style**: Follow [Rust's official coding guidelines](https://doc.rust-lang.org/book/ch14-02-publishing-to-crates-io.html#documentation).
+- **Style**: `Cargo fmt`
+- **Linting**: `Cargo clippy`
 - **Testing**: Ensure your changes are accompanied by tests and that all tests pass:
   ```bash
   cargo test
   ```
-- **Documentation**: Document your code where necessary (e.g., module-level comments, function-level comments).
+- **Documentation**: Document your code where necessary (function-level comments).
 
 ---
 
