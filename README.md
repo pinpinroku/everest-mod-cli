@@ -1,6 +1,6 @@
 # Everest Mod CLI
 
-A command-line interface tool for managing Celeste mods using the maddie480's public online database.
+A command line tool to help manage mods for the 2D platformer Celeste.
 
 This project currently targets **Linux** installation. **macOS** might work, but it's not guaranteed.
 
@@ -38,7 +38,9 @@ This project currently targets **Linux** installation. **macOS** might work, but
 
 ## Installation
 
-Download the binary from the release page. No extra installation steps is required, just place it in `~/.local/bin`, etc. Then add that directory to the PATH.
+Just download the binary from the [release](https://github.com/pinpinroku/everest-mod-cli/releases) page. You don't need to do any extra installation steps, just put it in `~/.local/bin`, etc. Then add that directory to the PATH.
+
+> Please wait a little bit for the binary release.
 
 ### Build yourself
 
@@ -158,12 +160,24 @@ everest-mod-cli update --install
 
 ## Option
 
+The default mods directory is set to the Steam game installation folder:
+
+`~/.local/share/Steam/steamapps/common/Celeste/Mods/`
+
 You can specify your custom mods directory using `--mods-dir`.
 ```bash
 # Install the mod "SpeedrunTool" while specifying the mods directory
 everest-mod-cli --mods-dir /home/maddy/game/exokgames/celeste/Mods/ install "SpeedrunTool"
 ```
 > The directory should have permissions of at least 0700.
+
+Just use an alias to make things easier:
+
+```bash
+#!/usr/bin/env bash
+# ~/.bashrc
+alias emc='everest-mod-cli --mods-dir $HOME/game/exokgames/celeste/Mods/'
+```
 
 ---
 
