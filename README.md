@@ -18,6 +18,7 @@ This project currently targets **Linux** installation. **macOS** might work, but
 - [Motivation](#motivation)
 - [Notes](#notes)
 - [Bug-Reports](#bug-reports)
+- [Contributing](#contributing)
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
 - [Contact](#contact)
@@ -193,6 +194,18 @@ Everest and Olympus are excellent tools for managing Celeste mods. However, ther
 If you encounter any issues or bugs, please open an issue using the bug report template:
 
 [Submit Bug Report](https://github.com/pinpinroku/everest-mod-cli/issues/new?assignees=&labels=&template=bug_report.md&title=)
+
+---
+
+## Contributing
+
+We welcome contributions to Everest Mod CLI! To contribute:
+
+1. Fork the repository.
+2. Create a new branch for your feature or bugfix.
+3. Submit a pull request with a clear explanation of your changes.
+
+For more details, check the [Contribution Guidelines](https://github.com/pinpinroku/everest-mod-cli/blob/main/CONTRIBUTING.md).
 
 ---
 
