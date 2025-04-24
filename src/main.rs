@@ -10,6 +10,8 @@ mod mod_registry;
 
 use cli::{Cli, Commands};
 use download::ModDownloader;
+use error::Error;
+use fileutil::find_installed_mod_archives;
 use installed_mods::{check_updates, list_installed_mods};
 use mod_registry::ModRegistry;
 use tracing::info;
@@ -23,7 +25,7 @@ use tracing::info;
 /// Returns an error if there are issues with parsing arguments, accessing the mods directory,
 /// or performing mod-related operations.
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Error> {
     // Initialize the tracing subscriber for logging.
     tracing_subscriber::fmt()
         .compact()
@@ -41,17 +43,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Command passed: {:#?}", &cli.command);
 
     // Determine the mods directory.
-    let mods_dir = cli.mods_dir.unwrap_or(fileutil::get_mods_directory()?);
+    let mods_directory = cli.mods_dir.unwrap_or(fileutil::get_mods_directory()?);
+
+    // Gathering mod paths
+    let archive_paths = find_installed_mod_archives(&mods_directory)?;
 
     // Handle commands based on user input.
     match &cli.command {
         Commands::List => {
-            // List all installed mods in the mods directory.
-            let installed_mods = list_installed_mods(&mods_dir)?;
-            if installed_mods.is_empty() {
+            if archive_paths.is_empty() {
                 println!("No mods are currently installed.");
                 return Ok(());
             }
+
+            // List all installed mods in the mods directory.
+            let installed_mods = list_installed_mods(archive_paths)?;
 
             println!("\nInstalled mods ({} found):", installed_mods.len());
             for mod_info in installed_mods {
@@ -65,7 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Show(args) => {
             // Show details of a specific mod if it is installed.
             println!("Checking installed mod information...");
-            let installed_mods = list_installed_mods(&mods_dir)?;
+            let installed_mods = list_installed_mods(archive_paths)?;
             if let Some(mod_info) = installed_mods.iter().find(|m| m.manifest.name == args.name) {
                 println!("\nMod Information:");
                 println!("- Name: {}", mod_info.manifest.name);
@@ -97,9 +103,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
+        // Install a mod by fetching its information from the mod registry.
         Commands::Install(args) => {
-            // Install a mod by fetching its information from the mod registry.
-            let installed_mods = list_installed_mods(&mods_dir)?;
+            let installed_mods = list_installed_mods(archive_paths)?;
 
             if installed_mods
                 .iter()
@@ -109,7 +115,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 return Ok(());
             }
 
-            let downloader = ModDownloader::new(&mods_dir);
+            let downloader = ModDownloader::new(&mods_directory);
             let mod_registry_data = downloader.fetch_mod_registry().await?;
             let mod_registry = ModRegistry::from(mod_registry_data).await?;
 
@@ -126,12 +132,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         Commands::Update(args) => {
             // Update installed mods by checking for available updates in the mod registry.
-            let downloader = ModDownloader::new(&mods_dir);
+            let downloader = ModDownloader::new(&mods_directory);
             let mod_registry_data = downloader.fetch_mod_registry().await?;
             let mod_registry = ModRegistry::from(mod_registry_data).await?;
 
             println!("Checking mod updates...");
-            let available_updates = check_updates(&mods_dir, &mod_registry)?;
+            let available_updates = check_updates(&mods_directory, &mod_registry)?;
             if available_updates.is_empty() {
                 println!("All mods are up to date!");
             } else {
