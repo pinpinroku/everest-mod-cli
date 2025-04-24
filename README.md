@@ -67,14 +67,13 @@ Just download the binary from the [release](https://github.com/pinpinroku/everes
 everest-mod-cli [OPTIONS] [COMMAND] 
 ```
 
-Available commands:
+**Available commands**:
 
 ### `list`
 
 List all installed mods, showing their actual names and versions.
 ```bash
 everest-mod-cli list
-# Collecting information about installed mods... This might take a few minutes if your mods library is huge
 #
 # Installed mods (138 found):
 # - AdamsAddons (version 1.13.3)
@@ -94,16 +93,17 @@ everest-mod-cli list
 
 Show the details of a specific mod that have been installed.
 ```bash
-everest-mod-cli show "Iceline_silentriver"
+everest-mod-cli show "zbs_Crystal"
 # Checking installed mod information...
-# Mod Information:
-# - Name: Iceline_silentriver
-# - Version: 1.1
 #
-# Dependencies:
-#  - Everest v1.4.0.0
-#  - SkinModHelper v0.6.1
-#  - IcelineLoadingAnim v1.0.0
+# Mod Information:
+# - Name: zbs_Crystal
+# - Version: 1.2.8
+#   Dependencies:
+#   - Name: Everest
+#   - Version: 1.3971.0
+#   Optional Dependencies:
+#   - Name: SaladimHelper
 ```
 
 ### `install <mod_name>`
@@ -124,7 +124,6 @@ everest-mod-cli install "SpeedrunTool"
 
 Check for available updates for installed mods.
 ```bash
-# Check for updates
 everest-mod-cli update
 # Checking mod updates...
 # Available updates:
@@ -138,7 +137,6 @@ everest-mod-cli update
 
 Install available updates.
 ```bash
-# Check and install available updates
 everest-mod-cli update --install
 # Checking mod updates...
 # Available updates:
