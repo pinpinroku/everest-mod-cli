@@ -137,22 +137,19 @@ pub fn read_updater_blacklist(mods_directory: &Path) -> Result<HashSet<PathBuf>,
 
     let reader = BufReader::new(file);
 
-    let mut filenames = Vec::new();
+    // Store in HashSet for O(1) lookups
+    let mut filenames: HashSet<PathBuf> = HashSet::new();
+
     for line_result in reader.lines() {
-        let line = line_result?; // Propagate any error.
+        let line = line_result?;
         let trimmed = line.trim();
         if !trimmed.is_empty() && !trimmed.starts_with('#') {
-            filenames.push(trimmed.to_string());
+            let filename = mods_directory.join(trimmed);
+            filenames.insert(filename);
         }
     }
 
-    // Convert blacklist entries to full paths and store in HashSet for O(1) lookups
-    let blacklisted_paths: HashSet<PathBuf> = filenames
-        .into_iter()
-        .map(|filename| mods_directory.join(filename))
-        .collect();
-
-    Ok(blacklisted_paths)
+    Ok(filenames)
 }
 
 #[cfg(test)]
