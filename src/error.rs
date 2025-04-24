@@ -21,6 +21,10 @@ pub enum Error {
     #[error(transparent)]
     Request(#[from] reqwest::Error),
 
+    /// Represents a task join error, transparently wrapping `tokio::task::JoinError`
+    #[error(transparent)]
+    TokioTask(#[from] tokio::task::JoinError),
+
     /// Error indicating that the home directory could not be determined
     #[error(
         "Could not determine home directory location!\

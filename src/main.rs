@@ -10,6 +10,7 @@ mod mod_registry;
 
 use cli::{Cli, Commands};
 use download::ModDownloader;
+use error::Error;
 use fileutil::find_installed_mod_archives;
 use installed_mods::{check_updates, list_installed_mods};
 use mod_registry::ModRegistry;
@@ -24,7 +25,7 @@ use tracing::info;
 /// Returns an error if there are issues with parsing arguments, accessing the mods directory,
 /// or performing mod-related operations.
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Error> {
     // Initialize the tracing subscriber for logging.
     tracing_subscriber::fmt()
         .compact()
@@ -43,6 +44,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Determine the mods directory.
     let mods_directory = cli.mods_dir.unwrap_or(fileutil::get_mods_directory()?);
+    if !mods_directory.exists() {
+        return Err(Error::MissingModsDirectory);
+    }
 
     // Gathering mod paths
     let archive_paths = find_installed_mod_archives(&mods_directory)?;
@@ -50,12 +54,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Handle commands based on user input.
     match &cli.command {
         Commands::List => {
-            // List all installed mods in the mods directory.
-            let installed_mods = list_installed_mods(archive_paths)?;
-            if installed_mods.is_empty() {
+            if archive_paths.is_empty() {
                 println!("No mods are currently installed.");
                 return Ok(());
             }
+
+            // List all installed mods in the mods directory.
+            let installed_mods = list_installed_mods(archive_paths)?;
 
             println!("\nInstalled mods ({} found):", installed_mods.len());
             for mod_info in installed_mods {
@@ -101,8 +106,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
+        // Install a mod by fetching its information from the mod registry.
         Commands::Install(args) => {
-            // Install a mod by fetching its information from the mod registry.
             let installed_mods = list_installed_mods(archive_paths)?;
 
             if installed_mods

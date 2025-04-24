@@ -34,16 +34,14 @@ pub fn get_mods_directory() -> Result<PathBuf, Error> {
 ///
 /// # Returns
 /// * `Ok(Vec<PathBuf>)` - A vector containing paths to all mod archive files found.
-/// * `Err(Error)` - An error if the mods directory does not exist or cannot be read.
+/// * `Err(Error)` - An error if the mods directory cannot be read.
 pub fn find_installed_mod_archives(mods_directory: &Path) -> Result<Vec<PathBuf>, Error> {
-    if !mods_directory.exists() {
-        return Err(Error::MissingModsDirectory);
-    }
-
     info!("Scanning installed mod archives in {:#?}", mods_directory);
 
     let mut mod_archives = Vec::new();
+
     let entries = fs::read_dir(mods_directory)?;
+
     for entry in entries {
         let entry = entry?;
         let path = entry.path();
@@ -189,7 +187,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_installed_mod_archives_success() {
+    fn test_find_installed_mod_archives() {
         let temp_dir = tempdir().unwrap();
         let file_path = temp_dir.path().join("test.zip");
         File::create(&file_path).unwrap();
@@ -200,16 +198,6 @@ mod tests {
         let archives = result.unwrap();
         assert_eq!(archives.len(), 1);
         assert_eq!(archives[0], file_path);
-    }
-
-    #[test]
-    fn test_find_installed_mod_archives_missing_directory() {
-        let nonexistent_path = Path::new("nonexistent_directory");
-
-        let result = find_installed_mod_archives(nonexistent_path);
-
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::MissingModsDirectory));
     }
 
     #[test]
