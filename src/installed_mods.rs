@@ -148,6 +148,38 @@ pub struct AvailableUpdateInfo {
     pub existing_path: PathBuf,
 }
 
+/// Checks for an update on a single local mod info.
+///
+/// Returns Some(AvailableUpdateInfo) if an update is available, or None otherwise.
+/// Returns an error if the checksum couldn't be computed.
+fn update_info_for_mod(
+    mut local_mod: LocalModInfo,
+    mod_registry: &ModRegistry,
+) -> Result<Option<AvailableUpdateInfo>, Error> {
+    // Look up remote mod info
+    let remote_mod = match mod_registry.get_mod_info(&local_mod.manifest.name) {
+        Some(info) => info,
+        None => return Ok(None), // No remote info, skip update check.
+    };
+
+    // Compute checksum (or propagate error using the ? operator)
+    let computed_hash = local_mod.checksum()?;
+
+    // Continue only if the hash doesn't match
+    if remote_mod.has_matching_hash(computed_hash) {
+        return Ok(None);
+    }
+
+    Ok(Some(AvailableUpdateInfo {
+        name: local_mod.manifest.name,
+        current_version: local_mod.manifest.version,
+        available_version: remote_mod.version.clone(),
+        url: remote_mod.download_url.clone(),
+        hash: remote_mod.checksums.clone(),
+        existing_path: local_mod.archive_path,
+    }))
+}
+
 /// Check available updates for all installed mods.
 ///
 /// # Arguments
@@ -161,30 +193,15 @@ pub fn check_updates(
     installed_mods: Vec<LocalModInfo>,
     mod_registry: &ModRegistry,
 ) -> Result<Vec<AvailableUpdateInfo>, Error> {
-    let mut available_updates = Vec::new();
-    for mut local_mod in installed_mods {
-        if let Some(remote_mod) = mod_registry.get_mod_info(&local_mod.manifest.name) {
-            // Compute hash on demand
-            if let Ok(computed_hash) = local_mod.checksum() {
-                if remote_mod.has_matching_hash(computed_hash) {
-                    continue; // No update available
-                };
-                let available_mod = remote_mod.clone();
-                available_updates.push(AvailableUpdateInfo {
-                    name: local_mod.manifest.name,
-                    current_version: local_mod.manifest.version,
-                    available_version: available_mod.version,
-                    url: available_mod.download_url,
-                    hash: available_mod.checksums,
-                    existing_path: local_mod.archive_path,
-                });
-            } else {
-                return Err(Error::FileIsNotHashed);
-            }
-        }
-    }
-
-    Ok(available_updates)
+    // Use iterator combinators to process each mod gracefully.
+    let updates = installed_mods
+        .into_iter()
+        .map(|local_mod| update_info_for_mod(local_mod, mod_registry))
+        .collect::<Result<Vec<Option<AvailableUpdateInfo>>, Error>>()?
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    Ok(updates)
 }
 
 /// Removes mods whose archive paths match entries in the updater blacklist from the provided vector.
