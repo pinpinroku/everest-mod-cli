@@ -44,9 +44,6 @@ async fn main() -> Result<(), Error> {
 
     // Determine the mods directory.
     let mods_directory = cli.mods_dir.unwrap_or(fileutil::get_mods_directory()?);
-    if !mods_directory.exists() {
-        return Err(Error::MissingModsDirectory);
-    }
 
     // Gathering mod paths
     let archive_paths = find_installed_mod_archives(&mods_directory)?;
