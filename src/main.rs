@@ -108,7 +108,7 @@ async fn main() -> Result<(), Error> {
         Commands::Install(args) => {
             let installed_mods = list_installed_mods(archive_paths)?;
 
-            // HACK: If args.url_or_name is a name, check if alread installed to prevent unnecessary fetching
+            // HACK: If args.url_or_name is a name, check if already installed to prevent unnecessary fetching
             // If args.url_or_name is an URL, fetch mod registry to get actual download URL
             let downloader = ModDownloader::new(&mods_directory);
             let mod_registry_data = downloader.fetch_mod_registry().await?;

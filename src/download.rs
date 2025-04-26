@@ -93,7 +93,7 @@ fn set_progress_bar_style(name: &str, total_size: u64) -> ProgressBar {
         .expect("Invalid progress bar style. Should be configured properly.")
     );
 
-    // If the name is too long, truncate it and add an elipsis at the end.
+    // If the name is too long, truncate it and add an ellipsis at the end.
     let mut name = name.to_string();
     let max_size = 40;
     if !name.len() <= max_size {
