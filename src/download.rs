@@ -7,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use tokio::{fs, io::AsyncWriteExt};
-use tracing::{error, info};
+use tracing::{debug, error, info};
 use xxhash_rust::xxh64::Xxh64;
 
 use crate::{constant::MOD_REGISTRY_URL, error::Error};
@@ -37,7 +37,10 @@ impl ModDownloader {
     /// A new instance of `ModDownloader`.
     pub fn new(download_dir: &Path) -> Self {
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .gzip(true)
+                .build()
+                .unwrap_or_else(|_| Client::new()),
             registry_url: String::from(MOD_REGISTRY_URL),
             download_dir: download_dir.to_path_buf(),
         }
@@ -50,7 +53,13 @@ impl ModDownloader {
     /// - `Err(Error)`: An error if the request or parsing fails.
     pub async fn fetch_mod_registry(&self) -> Result<Bytes, Error> {
         println!("Fetching online database...");
-        let response = self.client.get(&self.registry_url).send().await?;
+        let response = self
+            .client
+            .get(&self.registry_url)
+            .send()
+            .await?
+            .error_for_status()?;
+        debug!("{:#?}", response.headers());
         let yaml_data = response.bytes().await?;
         Ok(yaml_data)
     }
