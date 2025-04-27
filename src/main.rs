@@ -1,6 +1,6 @@
 use clap::Parser;
 use indicatif::MultiProgress;
-use reqwest::Url;
+use reqwest::Client;
 use tracing::info;
 
 mod cli;
@@ -13,11 +13,11 @@ mod installed_mods;
 mod mod_registry;
 
 use cli::{Cli, Commands};
-use download::{ModDownloader, build_progress_bar};
+use download::build_progress_bar;
 use error::Error;
 use fileutil::{find_installed_mod_archives, read_updater_blacklist};
 use installed_mods::{check_updates, list_installed_mods, remove_blacklisted_mods};
-use mod_registry::ModRegistry;
+use mod_registry::{fetch_remote_mod_registry, get_mod_info_from_url};
 
 /// The main function initializes the application, sets up tracing for logging, and parses CLI arguments.
 ///
@@ -108,53 +108,53 @@ async fn main() -> Result<(), Error> {
 
         // Install a mod by fetching its information from the mod registry.
         Commands::Install(args) => {
-            let installed_mods = list_installed_mods(archive_paths)?;
-
-            // HACK: If args.url_or_name is a name, check if already installed to prevent unnecessary fetching
-            // If args.url_or_name is an URL, fetch mod registry to get actual download URL
-            let downloader = ModDownloader::new(&mods_directory);
-            let mod_registry_data = downloader.fetch_mod_registry().await?;
-            let mod_registry = ModRegistry::from(mod_registry_data).await?;
+            // Fetching the mod information
+            let mod_registry = fetch_remote_mod_registry().await?;
+            let mod_info = get_mod_info_from_url(&mod_registry, &args.mod_page_url);
 
             // Determine if the input is a URL or a mod name
-            let name_or_url = &args.name_or_url;
-            let mod_info = Url::parse(name_or_url)
-                .is_ok_and(|url| {
-                    url.host_str()
-                        .is_some_and(|host| host.contains("gamebanana.com"))
-                })
-                // Valid GameBanana URL
-                .then(|| mod_registry.get_mod_info_from_url(name_or_url))
-                // Not a valid GameBanana URL, treat as mod name
-                .unwrap_or_else(|| mod_registry.get_mod_info_by_name(name_or_url));
-
             match mod_info {
                 Some(mod_info) => {
                     // Check if already installed
+                    let installed_mods = list_installed_mods(archive_paths)?;
                     if installed_mods
                         .iter()
-                        .any(|installed| installed.manifest.name == mod_info.name)
+                        .any(|installed| installed.manifest.name == *mod_info.0)
                     {
-                        println!("You already have [{}] installed.", mod_info.name);
+                        println!("You already have [{}] installed.", mod_info.0);
                         return Ok(());
                     }
-                    let pb = build_progress_bar(&mod_info.name, Some(mod_info.file_size));
 
-                    downloader.download_mod(mod_info, pb).await?;
+                    // Setup components for the downloader
+                    let client = Client::new();
+                    let total_size =
+                        crate::client::get_file_size(client.clone(), &mod_info.1.download_url)
+                            .await?;
+                    assert_eq!(total_size, mod_info.1.file_size, "File sizes must match!");
 
-                    info!("[{}] installation complete.", mod_info.name);
+                    let pb = build_progress_bar(mod_info.0, Some(total_size));
+
+                    crate::client::download_file(
+                        client.clone(),
+                        mod_info.0,
+                        &mod_info.1.download_url,
+                        &mod_info.1.checksums,
+                        &mods_directory,
+                        pb,
+                    )
+                    .await?;
+
+                    info!("[{}] installation complete.", mod_info.0);
                 }
                 None => {
-                    println!("Could not find a mod matching [{}].", name_or_url);
+                    println!("Could not find a mod matching [{}].", &args.mod_page_url);
                 }
             }
         }
 
         Commands::Update(args) => {
             // Update installed mods by checking for available updates in the mod registry.
-            let downloader = ModDownloader::new(&mods_directory);
-            let mod_registry_data = downloader.fetch_mod_registry().await?;
-            let mod_registry = ModRegistry::from(mod_registry_data).await?;
+            let mod_registry = fetch_remote_mod_registry().await?;
 
             // Filter installed mods by using the blacklist
             let mut installed_mods = list_installed_mods(archive_paths)?;
@@ -176,13 +176,15 @@ async fn main() -> Result<(), Error> {
                     println!("\nInstalling updates...");
                     let mut handles = Vec::new();
                     let multi_progress = MultiProgress::new();
+                    let client = Client::new();
 
                     available_updates.into_iter().for_each(|update| {
-                        let downloader = downloader.clone();
+                        let client = client.clone();
+                        let mods_directory = mods_directory.clone();
                         let pb = multi_progress.add(build_progress_bar(&update.name, None));
 
                         let handle = tokio::spawn(async move {
-                            let result = downloader.download_mod(&update, pb).await;
+                            let result = crate::client::download_file(client, &update.name, &update.url, &update.hash, &mods_directory, pb).await;
 
                             match result {
                                 Ok(_) => {

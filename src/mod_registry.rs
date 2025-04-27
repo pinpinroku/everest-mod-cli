@@ -1,17 +1,13 @@
 use std::collections::HashMap;
 
-use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::download::Downloadable;
+use crate::{constant::MOD_REGISTRY_URL, error::Error};
 
 /// Each entry in `everest_update.yaml` containing information about a mod.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Hash, PartialEq, Eq)]
 pub struct RemoteModInfo {
-    /// Actual mod name (not filename)
-    #[serde(skip)]
-    pub name: String,
     /// Version string
     #[serde(rename = "Version")]
     pub version: String,
@@ -35,18 +31,6 @@ pub struct RemoteModInfo {
     pub gamebanana_id: u32,
 }
 
-impl Downloadable for RemoteModInfo {
-    fn name(&self) -> &str {
-        &self.name
-    }
-    fn url(&self) -> &str {
-        &self.download_url
-    }
-    fn checksums(&self) -> &[String] {
-        &self.checksums
-    }
-}
-
 impl RemoteModInfo {
     /// Checks if the provided hash matches any of the expected checksums.
     ///
@@ -62,74 +46,42 @@ impl RemoteModInfo {
     }
 }
 
-// HACK: Replace ModRegistry to this simple type
-// type Entries = HashMap<String, RemoteModInfo>;
+pub type RemoteModRegistry = HashMap<String, RemoteModInfo>;
 
-/// Represents the complete `everest_update.yaml` containing all available remote mods.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ModRegistry {
-    /// A mapping of mod names to their metadata
-    #[serde(flatten)]
-    pub entries: HashMap<String, RemoteModInfo>,
+pub async fn fetch_remote_mod_registry() -> Result<RemoteModRegistry, Error> {
+    info!("Fetching online database...");
+    let client = reqwest::ClientBuilder::new()
+        .http2_prior_knowledge()
+        .gzip(true)
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+    let response = client.get(MOD_REGISTRY_URL).send().await?;
+    let data = response.bytes().await?;
+
+    info!("Parsing remote mod registry data.");
+    let mod_registry: RemoteModRegistry = serde_yaml_ng::from_slice(&data)?;
+
+    Ok(mod_registry)
 }
 
-impl ModRegistry {
-    /// Initializes a `ModRegistry` instance from raw binary data.
-    ///
-    /// # Arguments
-    /// * `data` - Raw binary data representing the mod registry.
-    ///
-    /// # Returns
-    /// * `Ok(Self)` - Parsed mod registry.
-    /// * `Err(serde_yaml_ng::Error)` - If parsing fails.
-    pub async fn from(data: Bytes) -> Result<Self, serde_yaml_ng::Error> {
-        info!("Parsing remote mod registry data");
-        let mut mod_registry: Self = serde_yaml_ng::from_slice(&data)?;
+/// Gets the mod registry entry that corresponds to the provided name.
+pub fn get_mod_info_by_name<'a>(
+    mod_registry: &'a RemoteModRegistry,
+    name: &str,
+) -> Option<(&'a String, &'a RemoteModInfo)> {
+    mod_registry.get_key_value(name)
+}
 
-        // Set the name field for each ModInfo.
-        mod_registry
-            .entries
-            .iter_mut()
-            .for_each(|(key, mod_info)| mod_info.name = key.clone());
-
-        Ok(mod_registry)
-    }
-
-    /// Retrieves mod information by name.
-    ///
-    /// # Arguments
-    /// * `name` - The name of the mod to retrieve.
-    ///
-    /// # Returns
-    /// * `Some(&RemoteModInfo)` - If the mod is found.
-    /// * `None` - If the mod is not found.
-    pub fn get_mod_info_by_name(&self, name: &str) -> Option<&RemoteModInfo> {
-        info!("Getting remote mod information for the mod: {}", name);
-        self.entries.get(name)
-    }
-
-    /// Retrieves mod information by game page URL.
-    ///
-    /// # Arguments
-    /// * `url` - The URL of the mod to retrieve.
-    ///
-    /// # Returns
-    /// * `Some(&RemoteModInfo)` - If the mod is found.
-    /// * `None` - If the mod is not found.
-    pub fn get_mod_info_from_url(&self, url: &str) -> Option<&RemoteModInfo> {
-        info!("Getting remote mod information for the URL: {}", url);
-        let id = url
-            .split("/")
-            .last()
-            .and_then(|id_str| id_str.parse::<u32>().ok());
-        if let Some(id) = id {
-            self.entries
-                .values()
-                .find(|manifest| manifest.gamebanana_id == id)
-        } else {
-            None
-        }
-    }
+/// Gets the mod registry entry that corresponds to the provided URL.
+pub fn get_mod_info_from_url<'a>(
+    mod_registry: &'a RemoteModRegistry,
+    game_page_url: &str,
+) -> Option<(&'a String, &'a RemoteModInfo)> {
+    info!("Getting the remote mod information from URL.");
+    let id = game_page_url.split('/').next_back()?.parse::<u32>().ok()?;
+    mod_registry
+        .iter()
+        .find(|(_, manifest)| manifest.gamebanana_id == id)
 }
 
 #[cfg(test)]
@@ -137,75 +89,74 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    /// Generates a `RemoteModInfo` instance with default or specified values.
-    pub fn generate_remote_mod_info(
-        name: &str,
-        version: &str,
-        checksums: Vec<String>,
-    ) -> RemoteModInfo {
-        RemoteModInfo {
-            name: name.to_string(),
-            version: version.to_string(),
-            file_size: 1024,
-            updated_at: 1234567890,
-            download_url: "https://gamebanana.com/mmdl/567812".to_string(),
-            checksums,
-            gamebanana_type: "Tool".to_string(),
-            gamebanana_id: 123456,
-        }
-    }
-
-    /// Generates a `ModRegistry` instance with default or specified mod entries.
-    pub fn generate_mod_registry(entries: Vec<(&str, RemoteModInfo)>) -> ModRegistry {
-        let mut registry_entries = HashMap::new();
-        for (name, mod_info) in entries {
-            registry_entries.insert(name.to_string(), mod_info);
-        }
-        ModRegistry {
-            entries: registry_entries,
-        }
-    }
-
+    /// Tests the get_mod_info_from_url function with a dummy registry.
     #[test]
-    fn test_remote_mod_info_has_matching_hash() {
-        let mod_info = generate_remote_mod_info(
-            "Test Mod",
-            "1.0.0",
-            vec![String::from("abcd1234"), String::from("efgh5678")],
-        );
+    fn test_get_mod_info_from_url_valid() {
+        // Create a dummy mod registry with two entries.
+        let mut mod_registry = HashMap::new();
+        let key1 = String::from("mod1");
+        let mod_info1 = RemoteModInfo {
+            version: "1.0".to_string(),
+            file_size: 1024,
+            updated_at: 1610000000,
+            download_url: "https://example.com/mod1".to_string(),
+            checksums: vec!["deadbeef".to_string()],
+            gamebanana_type: "test".to_string(),
+            gamebanana_id: 42,
+        };
+        let key2 = String::from("mod2");
+        let mod_info2 = RemoteModInfo {
+            version: "2.0".to_string(),
+            file_size: 2048,
+            updated_at: 1620000000,
+            download_url: "https://example.com/mod2".to_string(),
+            checksums: vec!["feedface".to_string()],
+            gamebanana_type: "test".to_string(),
+            gamebanana_id: 99,
+        };
+
+        mod_registry.insert(key1.clone(), mod_info1);
+        mod_registry.insert(key2.clone(), mod_info2);
+
+        // Test URL that should match gamebanana_id 42
+        let test_url = "https://gamebanana.com/members/42";
+        let result = get_mod_info_from_url(&mod_registry, test_url);
+        assert!(result.is_some());
+        let (found_key, found_mod) = result.unwrap();
+        // The found mod should have gamebanana_id 42 and the key should be "mod1"
+        assert_eq!(found_mod.gamebanana_id, 42);
+        assert_eq!(found_key, &key1);
+
+        // Test URL that does not match any entry
+        let invalid_url = "https://gamebanana.com/members/12345";
+        let result_invalid = get_mod_info_from_url(&mod_registry, invalid_url);
+        assert!(result_invalid.is_none());
+    }
+
+    /// Tests the get_mod_info_from_url function with an invalid URL (cannot parse an id).
+    #[test]
+    fn test_get_mod_info_from_url_invalid_url() {
+        let mod_registry: RemoteModRegistry = HashMap::new();
+        let malformed_url = "not a valid url";
+        let result = get_mod_info_from_url(&mod_registry, malformed_url);
+        assert!(result.is_none());
+    }
+
+    /// Tests the has_matching_hash method for RemoteModInfo.
+    #[test]
+    fn test_has_matching_hash() {
+        let mod_info = RemoteModInfo {
+            version: "1.0".to_string(),
+            file_size: 1024,
+            updated_at: 1610000000,
+            download_url: "https://example.com/mod".to_string(),
+            checksums: vec!["abcd1234".to_string(), "efgh5678".to_string()],
+            gamebanana_type: "test".to_string(),
+            gamebanana_id: 10,
+        };
 
         assert!(mod_info.has_matching_hash("abcd1234"));
-        assert!(!mod_info.has_matching_hash("xyz9876"));
-    }
-
-    #[test]
-    fn test_mod_registry_get_mod_info_by_name() {
-        let mod1 = generate_remote_mod_info("Mod1", "1.0.0", vec![String::from("hash1")]);
-        let mod2 = generate_remote_mod_info("Mod2", "2.0.0", vec![String::from("hash2")]);
-        let registry = generate_mod_registry(vec![("Mod1", mod1.clone()), ("Mod2", mod2.clone())]);
-
-        let mod_info = registry.get_mod_info_by_name("Mod1");
-        assert!(mod_info.is_some());
-        assert_eq!(mod_info.unwrap().version, "1.0.0");
-
-        let nonexistent_mod = registry.get_mod_info_by_name("Nonexistent");
-        assert!(nonexistent_mod.is_none());
-    }
-
-    #[test]
-    fn test_mod_registry_get_mod_info_from_url() {
-        let mod1 = generate_remote_mod_info("Mod1", "1.0.0", vec![String::from("hash1")]);
-        let registry = generate_mod_registry(vec![("Mod1", mod1.clone())]);
-
-        let mod_info = registry.get_mod_info_from_url("https://gamebanan.com/mods/123456");
-        assert!(mod_info.is_some());
-        assert_eq!(mod_info.unwrap().gamebanana_id, 123456);
-        assert_eq!(
-            mod_info.unwrap().download_url,
-            "https://gamebanana.com/mmdl/567812"
-        );
-
-        let not_url = registry.get_mod_info_from_url("Mod 1");
-        assert!(not_url.is_none());
+        assert!(mod_info.has_matching_hash("efgh5678"));
+        assert!(!mod_info.has_matching_hash("notfound"));
     }
 }

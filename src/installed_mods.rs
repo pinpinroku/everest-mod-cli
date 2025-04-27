@@ -6,10 +6,9 @@ use std::{
 use tracing::{debug, info, warn};
 
 use crate::{
-    download::Downloadable,
     error::Error,
     fileutil::{hash_file, read_manifest_file_from_zip},
-    mod_registry::ModRegistry,
+    mod_registry::{RemoteModRegistry, get_mod_info_by_name},
 };
 
 /// Represents the `everest.yaml` manifest file that defines a mod
@@ -168,18 +167,6 @@ pub struct AvailableUpdateInfo {
     pub existing_path: PathBuf,
 }
 
-impl Downloadable for AvailableUpdateInfo {
-    fn name(&self) -> &str {
-        &self.name
-    }
-    fn url(&self) -> &str {
-        &self.url
-    }
-    fn checksums(&self) -> &[String] {
-        &self.hash
-    }
-}
-
 /// Checks for an available update for a single installed mod.
 ///
 /// This function compares the local mod's checksum with the checksum provided by the remote mod registry.
@@ -196,11 +183,11 @@ impl Downloadable for AvailableUpdateInfo {
 /// * `Err(Error)` if there is an error computing the mod's checksum.
 fn check_update(
     mut local_mod: impl GenerateLocalDatabase,
-    mod_registry: &ModRegistry,
+    mod_registry: &RemoteModRegistry,
 ) -> Result<Option<AvailableUpdateInfo>, Error> {
     // Look up remote mod info
     let manifest = local_mod.manifest();
-    let remote_mod = match mod_registry.get_mod_info_by_name(&manifest.name) {
+    let remote_mod = match get_mod_info_by_name(mod_registry, &manifest.name) {
         Some(info) => info,
         None => return Ok(None), // No remote info, skip update check.
     };
@@ -209,11 +196,11 @@ fn check_update(
     let computed_hash = local_mod.checksum()?;
 
     // Continue only if the hash doesn't match
-    if remote_mod.has_matching_hash(computed_hash) {
+    if remote_mod.1.has_matching_hash(computed_hash) {
         return Ok(None);
     }
 
-    let remote_mod = remote_mod.clone();
+    let remote_mod = remote_mod.1.clone();
     let manifest = local_mod.manifest();
 
     Ok(Some(AvailableUpdateInfo {
@@ -237,7 +224,7 @@ fn check_update(
 /// * `Err(Error)` - If there are issues fetching or computing update information.
 pub fn check_updates(
     installed_mods: Vec<impl GenerateLocalDatabase>,
-    mod_registry: &ModRegistry,
+    mod_registry: &RemoteModRegistry,
 ) -> Result<Vec<AvailableUpdateInfo>, Error> {
     // Use iterator combinators to process each mod gracefully.
     let updates = installed_mods
@@ -441,14 +428,8 @@ mod tests_for_updates {
     }
 
     // Helper function to create a dummy RemoteModInfo.
-    fn create_remote_mod(
-        name: &str,
-        version: &str,
-        download_url: &str,
-        checksums: Vec<&str>,
-    ) -> RemoteModInfo {
+    fn create_remote_mod(version: &str, download_url: &str, checksums: Vec<&str>) -> RemoteModInfo {
         RemoteModInfo {
-            name: name.to_string(),
             version: version.to_string(),
             file_size: 12345,
             updated_at: 0,
