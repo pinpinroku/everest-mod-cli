@@ -43,7 +43,7 @@ pub fn find_installed_mod_archives(mods_directory: &Path) -> Result<Vec<PathBuf>
     info!(
         "Scanning the installed mod archives in {:?}",
         format!(
-            "~{}",
+            "~/{}",
             mods_directory
                 .strip_prefix(home_dir().unwrap()) // unwrap is fine because `mods_directory` is constructed
                 .unwrap_or(mods_directory)

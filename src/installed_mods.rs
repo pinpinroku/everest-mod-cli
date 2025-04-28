@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashSet, VecDeque},
     path::{Path, PathBuf},
+    time::Instant,
 };
 use tracing::{debug, info, warn};
 
@@ -120,6 +121,7 @@ impl GenerateLocalDatabase for LocalModInfo {
 pub fn list_installed_mods(archive_paths: Vec<PathBuf>) -> Result<InstalledModList, Error> {
     let mut installed_mods = Vec::with_capacity(archive_paths.len());
 
+    let start = Instant::now();
     for archive_path in archive_paths {
         let manifest_content = read_manifest_file_from_zip(&archive_path)?;
         match manifest_content {
@@ -129,6 +131,7 @@ pub fn list_installed_mods(archive_paths: Vec<PathBuf>) -> Result<InstalledModLi
                 installed_mods.push(mod_info);
             }
             None => {
+                // HACK: Collect failed mods in another vector
                 let debug_path = archive_path
                     .file_name()
                     .and_then(|path| path.to_str())
@@ -143,6 +146,9 @@ pub fn list_installed_mods(archive_paths: Vec<PathBuf>) -> Result<InstalledModLi
             }
         }
     }
+    let duration = start.elapsed();
+    debug!("Manifest file scanning takes: {:#?}", duration);
+
     // Sort by name
     info!("Sorting the installed mods by name...");
     installed_mods.sort_by(|a, b| a.manifest.name.cmp(&b.manifest.name));

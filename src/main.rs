@@ -26,9 +26,9 @@ fn init_tracing(cli: &Cli) {
     use tracing_subscriber::fmt;
 
     let (max_level, extra_details) = match (cli.quiet, cli.verbose) {
-        (true, _) => (LevelFilter::OFF, false),
-        (_, true) => (LevelFilter::DEBUG, true),
-        _ => (LevelFilter::INFO, false),
+        (true, _) => (LevelFilter::OFF, false), // Shows only `println!` statement
+        (_, true) => (LevelFilter::DEBUG, true), // Shows everything
+        _ => (LevelFilter::ERROR, false),       // Shows only serious problems
     };
 
     let builder = fmt().compact().with_max_level(max_level);
@@ -86,13 +86,14 @@ async fn main() -> Result<(), Error> {
             // List all installed mods in the mods directory.
             let installed_mods = list_installed_mods(archive_paths)?;
 
-            info!("\nInstalled mods ({} found):", installed_mods.len());
-            for mod_info in installed_mods {
+            for mod_info in installed_mods.iter() {
                 println!(
                     "- {} (version {})",
                     mod_info.manifest.name, mod_info.manifest.version
                 );
             }
+
+            info!("{} mods installed.):", &installed_mods.len());
         }
 
         Commands::Show(args) => {
