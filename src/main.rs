@@ -4,7 +4,6 @@ use reqwest::Client;
 use tracing::{debug, info, level_filters::LevelFilter};
 
 mod cli;
-mod client;
 mod constant;
 mod download;
 mod error;
@@ -98,10 +97,10 @@ async fn main() -> Result<(), Error> {
 
         Commands::Show(args) => {
             // Show details of a specific mod if it is installed.
-            println!("Checking installed mod information...");
+            info!("Checking installed mod information...");
             let installed_mods = list_installed_mods(archive_paths)?;
             if let Some(mod_info) = installed_mods.iter().find(|m| m.manifest.name == args.name) {
-                println!("\nMod Information:");
+                info!("\nMod Information:");
                 println!("- Name: {}", mod_info.manifest.name);
                 println!("- Version: {}", mod_info.manifest.version);
                 if let Some(deps) = &mod_info.manifest.dependencies {
@@ -154,13 +153,12 @@ async fn main() -> Result<(), Error> {
                     // Setup components for the downloader
                     let client = Client::new();
                     let total_size =
-                        crate::client::get_file_size(client.clone(), &mod_info.1.download_url)
-                            .await?;
+                        download::get_file_size(client.clone(), &mod_info.1.download_url).await?;
                     assert_eq!(total_size, mod_info.1.file_size, "File sizes must match!");
 
                     let pb = build_progress_bar(mod_info.0, Some(total_size));
 
-                    crate::client::download_file(
+                    download::download_file(
                         client.clone(),
                         mod_info.0,
                         &mod_info.1.download_url,
@@ -210,7 +208,7 @@ async fn main() -> Result<(), Error> {
                         let pb = multi_progress.add(build_progress_bar(&update.name, None));
 
                         let handle = tokio::spawn(async move {
-                            let result = crate::client::download_file(client, &update.name, &update.url, &update.hash, &mods_directory, pb).await;
+                            let result = download::download_file(client, &update.name, &update.url, &update.hash, &mods_directory, pb).await;
 
                             match result {
                                 Ok(_) => {
