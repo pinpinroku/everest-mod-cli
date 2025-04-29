@@ -92,7 +92,7 @@ async fn main() -> Result<(), Error> {
                 );
             }
 
-            info!("{} mods installed.):", &installed_mods.len());
+            info!("{} mods installed.", &installed_mods.len());
         }
 
         Commands::Show(args) => {
@@ -100,7 +100,6 @@ async fn main() -> Result<(), Error> {
             info!("Checking installed mod information...");
             let installed_mods = list_installed_mods(archive_paths)?;
             if let Some(mod_info) = installed_mods.iter().find(|m| m.manifest.name == args.name) {
-                info!("\nMod Information:");
                 println!("- Name: {}", mod_info.manifest.name);
                 println!("- Version: {}", mod_info.manifest.version);
                 if let Some(deps) = &mod_info.manifest.dependencies {

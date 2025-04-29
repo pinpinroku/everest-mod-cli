@@ -11,7 +11,7 @@ use tracing::{debug, info};
 use xxhash_rust::xxh64::Xxh64;
 use zip::{ZipArchive, result::ZipError};
 
-use crate::constant::{MOD_MANIFEST_FILE, STEAM_MODS_DIRECTORY_PATH, UPDATER_BLACKLIST_FILE};
+use crate::constant::{STEAM_MODS_DIRECTORY_PATH, UPDATER_BLACKLIST_FILE};
 use crate::error::Error;
 
 /// Returns the path to the user's mods directory based on platform-specific conventions.
@@ -67,6 +67,37 @@ pub fn find_installed_mod_archives(mods_directory: &Path) -> Result<Vec<PathBuf>
     Ok(mod_archives)
 }
 
+/// Search manifest file in the zip archive
+///
+/// # Arguments
+/// * `zip_archive` - A mutable reference to the `ZipArchive`.
+/// * `filename` - A manifest filename which should be "everest.[yaml|yml]"
+///
+/// # Returns
+/// * `Ok(Some(Vec<u8>))` - The content of the manifest file if found.
+/// * `Ok(None)` - If the manifest file is not present in the archive.
+/// * `Err(Error)` - An error if the ZIP archive could not be read.
+fn read_manifest_from_zip(
+    zip_archive: &mut ZipArchive<std::io::BufReader<std::fs::File>>,
+    filename: &str,
+) -> Result<Option<Vec<u8>>, Error> {
+    match zip_archive.by_name(filename) {
+        Ok(mut file) => {
+            // NOTE: Max file size of `everest.yaml` should be under 10KB
+            let mut buffer = Vec::with_capacity(12 * 1024);
+            file.read_to_end(&mut buffer)?;
+
+            // Check for UTF-8 BOM and remove if present
+            if buffer.starts_with(&[0xEF, 0xBB, 0xBF]) {
+                buffer.drain(0..3);
+            }
+            Ok(Some(buffer))
+        }
+        Err(ZipError::FileNotFound) => Ok(None),
+        Err(err) => Err(Error::Zip(err)),
+    }
+}
+
 /// Reads the mod manifest file from a given ZIP archive.
 ///
 /// # Arguments
@@ -81,22 +112,12 @@ pub fn read_manifest_file_from_zip(zip_path: &Path) -> Result<Option<Vec<u8>>, E
     let reader = BufReader::new(zip_file);
     let mut zip_archive = ZipArchive::new(reader)?;
 
-    match zip_archive.by_name(MOD_MANIFEST_FILE) {
-        Ok(mut file) => {
-            // NOTE: Max file size of `everest.yaml` should be under 10KB
-            let mut buffer = Vec::with_capacity(12 * 1024);
-            file.read_to_end(&mut buffer)?;
-
-            // Check for UTF-8 BOM and remove if present
-            if buffer.len() >= 3 && buffer[0] == 0xEF && buffer[1] == 0xBB && buffer[2] == 0xBF {
-                buffer.drain(0..3);
-            }
-
-            Ok(Some(buffer))
-        }
-        Err(ZipError::FileNotFound) => Ok(None),
-        Err(err) => Err(Error::Zip(err)),
+    if let Some(content) = read_manifest_from_zip(&mut zip_archive, "everest.yaml")? {
+        return Ok(Some(content)); // Return early if found, to prevent duplicate mutable borrows
     }
+
+    // Fallback to alternative filename
+    read_manifest_from_zip(&mut zip_archive, "everest.yml")
 }
 
 /// Computes the xxhash of a given file and returns it as a hexadecimal string.
@@ -157,13 +178,19 @@ pub fn read_updater_blacklist(mods_directory: &Path) -> Result<HashSet<PathBuf>,
             filenames.insert(filename);
         }
     }
-    debug!("Detected filenames: {:#?}", filenames);
+    debug!(
+        "Detected filenames: {:#?}",
+        filenames
+            .iter()
+            .filter_map(|filename| filename.file_name())
+            .collect::<HashSet<_>>()
+    );
 
     Ok(filenames)
 }
 
 #[cfg(test)]
-mod tests {
+mod tests_fileutil {
     use super::*;
     use std::io::Write;
     use tempfile::{NamedTempFile, tempdir};
