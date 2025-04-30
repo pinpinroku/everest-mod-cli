@@ -5,7 +5,7 @@ use tracing::info;
 
 use crate::{download, error::Error, mod_registry::RemoteModInfo};
 
-/// MODの新規インストールを行う
+/// Install a mod
 pub async fn install(
     client: &Client,
     (name, manifest): (&str, &RemoteModInfo),

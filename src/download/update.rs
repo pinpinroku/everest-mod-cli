@@ -4,7 +4,7 @@ use tracing::{error, info};
 
 use crate::{download, error::Error, installed_mods::AvailableUpdateInfo};
 
-/// MODの更新を行う
+/// Update a mod
 pub async fn update(
     client: &Client,
     update_info: &AvailableUpdateInfo,
@@ -19,12 +19,11 @@ pub async fn update(
     )
     .await?;
 
-    // ファイルダウンロードに成功したら既存ファイルを削除する
+    // Remove outdated file when download succeed.
     if update_info.existing_path.exists() {
         tokio::fs::remove_file(&update_info.existing_path).await?;
     }
 
-    // その他のアップデート固有の処理を行う
     info!(
         "Updated {} to version {}\n",
         update_info.name, update_info.available_version
@@ -33,8 +32,8 @@ pub async fn update(
     Ok(())
 }
 
-/// 全てのMODをまとめて更新する
-pub async fn download_all(
+/// Update multiple mods concurrently
+pub async fn update_multiple_mods(
     client: &Client,
     download_dir: &Path,
     updates: Vec<AvailableUpdateInfo>,

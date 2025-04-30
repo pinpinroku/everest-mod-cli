@@ -174,8 +174,12 @@ async fn main() -> Result<(), Error> {
                 if args.install {
                     info!("\nInstalling updates...");
                     let client = Client::new();
-                    download::update::download_all(&client, &mods_directory, available_updates)
-                        .await?;
+                    download::update::update_multiple_mods(
+                        &client,
+                        &mods_directory,
+                        available_updates,
+                    )
+                    .await?;
                 } else {
                     info!("\nRun with --install to install these updates");
                 }
