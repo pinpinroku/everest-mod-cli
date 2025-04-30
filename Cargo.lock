@@ -425,7 +425,6 @@ dependencies = [
 name = "everest-mod-cli"
 version = "2.0.0"
 dependencies = [
- "bytes",
  "clap",
  "futures-util",
  "indicatif",
