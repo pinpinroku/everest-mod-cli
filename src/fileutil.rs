@@ -20,11 +20,28 @@ use crate::error::Error;
 /// * `Ok(PathBuf)` - The path to the mods directory if detected successfully.
 /// * `Err(Error)` - An error if the home directory could not be determined.
 pub fn get_mods_directory() -> Result<PathBuf, Error> {
-    info!("Detecting Celeste/Mods directory...");
+    debug!("Detecting Celeste/Mods directory...");
     // NOTE: `std::env::home_dir()` will be undeprecated in rust 1.87.0
     home_dir()
         .map(|home_path| home_path.join(STEAM_MODS_DIRECTORY_PATH))
         .ok_or(Error::CouldNotDetermineHomeDir)
+}
+
+/// Replace `/home/user/` with `~/`
+pub fn replace_home_dir_with_tilde(destination: &Path) -> String {
+    let fallback = destination.to_string_lossy().into_owned();
+
+    // Get the home directory
+    let home = match home_dir() {
+        Some(h) => h,
+        None => return fallback,
+    };
+
+    // Try to strip the home directory prefix
+    match destination.strip_prefix(&home) {
+        Ok(relative_path) => format!("~/{}", relative_path.display()),
+        Err(_) => fallback,
+    }
 }
 
 /// Scans the mods directory and returns a list of all installed mod archive files.
@@ -40,15 +57,9 @@ pub fn find_installed_mod_archives(mods_directory: &Path) -> Result<Vec<PathBuf>
         return Err(Error::MissingModsDirectory);
     }
 
-    info!(
+    debug!(
         "Scanning the installed mod archives in {:?}",
-        format!(
-            "~/{}",
-            mods_directory
-                .strip_prefix(home_dir().unwrap()) // unwrap is fine because `mods_directory` is constructed
-                .unwrap_or(mods_directory)
-                .display()
-        )
+        replace_home_dir_with_tilde(mods_directory)
     );
 
     let mut mod_archives = Vec::new();
@@ -220,6 +231,19 @@ mod tests_fileutil {
         assert!(mods_dir.is_ok());
         let path = mods_dir.unwrap();
         assert!(path.ends_with(STEAM_MODS_DIRECTORY_PATH));
+    }
+
+    #[test]
+    fn test_replace_home_dir() {
+        let home = home_dir().unwrap();
+        let path = home.join("documents/file.txt");
+        assert_eq!(replace_home_dir_with_tilde(&path), "~/documents/file.txt");
+    }
+
+    #[test]
+    fn test_non_home_dir() {
+        let path = Path::new("/etc/config.txt");
+        assert_eq!(replace_home_dir_with_tilde(path), "/etc/config.txt");
     }
 
     #[test]
