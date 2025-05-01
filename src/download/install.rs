@@ -52,6 +52,8 @@ pub async fn install(
                     .await?;
                 }
             }
+        } else {
+            info!("You already have all the dependencies required by this mod.");
         }
     }
 
