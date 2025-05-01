@@ -174,7 +174,7 @@ pub struct AvailableUpdateInfo {
     /// Download URL of the Mod
     pub url: String,
     /// xxHashes of the file
-    pub hash: Vec<String>,
+    pub hashes: Vec<String>,
     /// Outdated file
     pub existing_path: PathBuf,
 }
@@ -220,7 +220,7 @@ fn check_update(
         current_version: manifest.version.to_string(),
         available_version: remote_mod.version,
         url: remote_mod.download_url,
-        hash: remote_mod.checksums,
+        hashes: remote_mod.checksums,
         existing_path: local_mod.archive_path().to_path_buf(),
     }))
 }
