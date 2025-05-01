@@ -9,7 +9,7 @@ use tracing::{debug, warn};
 use crate::{
     error::Error,
     fileutil::{hash_file, read_manifest_file_from_zip, replace_home_dir_with_tilde},
-    mod_registry::{RemoteModRegistry, get_mod_info_by_name},
+    mod_registry::{ModRegistryQuery, RemoteModRegistry},
 };
 
 /// Represents the `everest.yaml` manifest file that defines a mod
@@ -199,7 +199,7 @@ fn check_update(
 ) -> Result<Option<AvailableUpdateInfo>, Error> {
     // Look up remote mod info
     let manifest = local_mod.manifest();
-    let remote_mod = match get_mod_info_by_name(mod_registry, &manifest.name) {
+    let (_, remote_mod) = match mod_registry.get_mod_info_by_name(&manifest.name) {
         Some(info) => info,
         None => return Ok(None), // No remote info, skip update check.
     };
@@ -208,11 +208,11 @@ fn check_update(
     let computed_hash = local_mod.checksum()?;
 
     // Continue only if the hash doesn't match
-    if remote_mod.1.has_matching_hash(computed_hash) {
+    if remote_mod.has_matching_hash(computed_hash) {
         return Ok(None);
     }
 
-    let remote_mod = remote_mod.1.clone();
+    let remote_mod = remote_mod.clone();
     let manifest = local_mod.manifest();
 
     Ok(Some(AvailableUpdateInfo {
