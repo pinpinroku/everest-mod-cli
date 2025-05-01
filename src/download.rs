@@ -1,148 +1,85 @@
-use bytes::Bytes;
 use futures_util::StreamExt;
-use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::Client;
-use std::{
-    borrow::Cow,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 use tokio::{fs, io::AsyncWriteExt};
 use tracing::{debug, error, info};
 use xxhash_rust::xxh64::Xxh64;
 
-use crate::{constant::MOD_REGISTRY_URL, error::Error};
+use crate::{error::Error, fileutil::replace_home_dir_with_tilde};
 
-/// Downloadable trait
-pub trait Downloadable {
-    fn name(&self) -> &str;
-    fn url(&self) -> &str;
-    fn checksums(&self) -> &[String];
+pub mod install;
+pub mod update;
+
+#[allow(dead_code)] // NOTE: Maybe use this for progress bar in the future.
+/// Get the file size
+async fn get_file_size(client: &Client, url: &str) -> Result<u64, Error> {
+    debug!(
+        "Get the file size by sending HEAD request to the server: {}",
+        url
+    );
+
+    let response = client.head(url).send().await?.error_for_status()?;
+    debug!("Status code: {:#?}", response.status());
+
+    let total_size = response
+        .headers()
+        .get(reqwest::header::CONTENT_LENGTH)
+        .and_then(|length_header| length_header.to_str().ok())
+        .and_then(|length_str| length_str.parse::<u64>().ok())
+        .unwrap_or(0);
+    debug!("Total size: {}", total_size);
+
+    Ok(total_size)
 }
 
-/// Manages mod downloads and registry fetching.
-#[derive(Debug, Clone)]
-pub struct ModDownloader {
-    client: Client,
-    registry_url: String,
-    download_dir: PathBuf,
+/// Download a single mod file
+pub async fn download_mod(
+    client: &Client,
+    mod_name: &str,
+    url: &str,
+    expected_hashes: &[String],
+    download_dir: &Path,
+) -> Result<PathBuf, Error> {
+    // User-friendly status at info level
+    info!("📥 Downloading {}", mod_name);
+
+    // Debug details only shown in verbose mode
+    debug!("URL: {}", url);
+    debug!("Destination directory: {}", download_dir.display()); // Attempt to download the file
+
+    let response = client.get(url).send().await?.error_for_status()?;
+    debug!("Response status: {}", response.status());
+
+    let filename = util::determine_filename(response.url(), response.headers());
+    let download_path = download_dir.join(&filename);
+
+    info!("Saving as: {}", filename);
+    debug!("Full path: {}", replace_home_dir_with_tilde(&download_path));
+
+    let computed_hash = download_and_write(response, &download_path).await?;
+
+    verify_checksum(computed_hash, expected_hashes, &download_path).await?;
+
+    Ok(download_path)
 }
 
-impl ModDownloader {
-    /// Creates a new `ModDownloader` with the specified download directory.
-    ///
-    /// # Parameters
-    /// - `download_dir`: The directory where downloaded mods will be stored.
-    ///
-    /// # Returns
-    /// A new instance of `ModDownloader`.
-    pub fn new(download_dir: &Path) -> Self {
-        Self {
-            client: Client::builder()
-                .gzip(true)
-                .build()
-                .unwrap_or_else(|_| Client::new()),
-            registry_url: String::from(MOD_REGISTRY_URL),
-            download_dir: download_dir.to_path_buf(),
-        }
-    }
-
-    /// Fetches the remote mod registry.
-    ///
-    /// # Returns
-    /// - `Ok(Bytes)`: The raw bytes of the registry file upon success.
-    /// - `Err(Error)`: An error if the request or parsing fails.
-    pub async fn fetch_mod_registry(&self) -> Result<Bytes, Error> {
-        println!("Fetching online database...");
-        let response = self
-            .client
-            .get(&self.registry_url)
-            .send()
-            .await?
-            .error_for_status()?;
-        debug!("{:#?}", response.headers());
-        let yaml_data = response.bytes().await?;
-        Ok(yaml_data)
-    }
-
-    /// Downloads a mod file, saves it locally, and verifies its integrity.
-    ///
-    /// # Parameters
-    /// - `target`: Downloadable object which contains name, url, and expected_hashes
-    ///
-    /// # Returns
-    /// - `Ok(())` if the download and checksum verification succeed.
-    /// - `Err(Error)` if an error occurs during download or checksum verification.
-    pub async fn download_mod<D: Downloadable>(
-        &self,
-        target: &D,
-        pb: ProgressBar,
-    ) -> Result<(), Error> {
-        let name = target.name();
-        let url = target.url();
-        let expected_hash = target.checksums();
-        // TODO: Handling errors like 404 or 500+
-        let response = self.client.get(url).send().await?.error_for_status()?;
-        info!("[{}] Status code: {:#?}", name, response.status());
-
-        let filename = util::determine_filename(response.url(), response.headers());
-        let download_path = self.download_dir.join(filename);
-        info!("[{}] Destination: {:#?}", name, download_path);
-
-        let total_size = response.content_length().unwrap_or(0);
-        info!("[{}] Total file size: {}", name, total_size);
-
-        pb.set_length(total_size);
-
-        let computed_hash = download_and_write(response, &download_path, pb).await?;
-
-        info!("\n[{}] 🔍 Verifying checksum...", name);
-        verify_checksum(computed_hash, expected_hash, &download_path).await?;
-
-        Ok(())
-    }
-}
-
-/// Build progress bar
-pub fn build_progress_bar(name: &str, total_size: Option<u64>) -> ProgressBar {
-    let pb = ProgressBar::new(total_size.unwrap_or(0));
-
-    let style = ProgressStyle::with_template(
-        "{msg:<} {total_bytes:>40.1.cyan/blue} {bytes_per_sec:.2} {eta_precise:} {bar:60} {percent:}%"
-    ).unwrap_or_else(|_| ProgressStyle::default_bar());
-    pb.set_style(style);
-
-    // If the name is too long, truncate it and add an ellipsis at the end.
-    let max_size = 40;
-    let msg: Cow<str> = if name.len() > max_size {
-        Cow::Owned(format!("{}...", &name[..max_size - 3]))
-    } else {
-        Cow::Borrowed(name)
-    };
-    pb.set_message(msg.to_string());
-
-    pb
-}
-
-/// Downloads the mod and writes it to a file, updating the progress bar. Returns computed_hash.
 async fn download_and_write(
     response: reqwest::Response,
     download_path: &Path,
-    pb: ProgressBar,
 ) -> Result<u64, Error> {
+    info!(
+        "Start writing data to the destination: {}",
+        replace_home_dir_with_tilde(download_path)
+    );
     let mut stream = response.bytes_stream();
     let mut hasher = Xxh64::new(0);
     let mut file = fs::File::create(download_path).await?;
-    let mut downloaded: u64 = 0;
 
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
         file.write_all(&chunk).await?;
         hasher.update(&chunk);
-        downloaded = downloaded.saturating_add(chunk.len() as u64);
-        pb.set_position(downloaded);
     }
-
-    pb.finish();
 
     Ok(hasher.digest())
 }
@@ -150,26 +87,31 @@ async fn download_and_write(
 /// Verifies the checksum of the downloaded file.
 async fn verify_checksum(
     computed_hash: u64,
-    expected_hash: &[String],
+    expected_hashes: &[String],
     download_path: &Path,
 ) -> Result<(), Error> {
     let hash_str = format!("{:016x}", computed_hash);
-    info!(
+    info!("🔍 Verifying checksum...");
+    debug!(
         "Xxhash in u64: {:#?}, formatted string: {:#?}",
         computed_hash, hash_str
     );
+    debug!(
+        "Checking computed hash: {} against expected: {:?}",
+        computed_hash, expected_hashes
+    );
 
-    if expected_hash.contains(&hash_str) {
+    if expected_hashes.contains(&hash_str) {
         info!("✅ Checksum verified!");
         Ok(())
     } else {
         error!("❌ Checksum verification failed!");
         fs::remove_file(&download_path).await?;
-        info!("[Cleanup] Downloaded file removed 🗑️");
+        info!("🗑️ Downloaded file removed.");
         Err(Error::InvalidChecksum {
             file: download_path.to_path_buf(),
             computed: hash_str,
-            expected: expected_hash.to_vec(),
+            expected: expected_hashes.to_vec(),
         })
     }
 }
@@ -205,7 +147,7 @@ mod util {
         headers
             .get(reqwest::header::ETAG)
             .and_then(|etag_value| etag_value.to_str().ok())
-            .map(|etag| etag.trim_matches('"').to_string())
+            .map(|etag| etag.trim_matches('"'))
             .map(|etag| format!("{}.zip", etag))
     }
 

@@ -23,7 +23,11 @@ pub enum Error {
 
     /// Represents a task join error, transparently wrapping `tokio::task::JoinError`
     #[error(transparent)]
-    TokioTask(#[from] tokio::task::JoinError),
+    TaskJoin(#[from] tokio::task::JoinError),
+
+    /// Multiple update failures
+    #[error("Multiple update errors occurred: {0:?}")]
+    MultipleUpdate(Vec<Error>),
 
     /// Error indicating that the home directory could not be determined
     #[error(
@@ -53,4 +57,8 @@ pub enum Error {
         /// A list of expected checksums for the file
         expected: Vec<String>,
     },
+
+    /// Missing manifest file in the download path
+    #[error("Manifest file not found at path: {0}")]
+    MissingManifestFile(PathBuf),
 }
