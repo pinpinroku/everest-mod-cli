@@ -57,4 +57,8 @@ pub enum Error {
         /// A list of expected checksums for the file
         expected: Vec<String>,
     },
+
+    /// Missing manifest file in the download path
+    #[error("Manifest file not found at path: {0}")]
+    MissingManifestFile(PathBuf),
 }

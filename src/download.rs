@@ -1,6 +1,6 @@
 use futures_util::StreamExt;
 use reqwest::Client;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio::{fs, io::AsyncWriteExt};
 use tracing::{debug, error, info};
 use xxhash_rust::xxh64::Xxh64;
@@ -39,7 +39,7 @@ pub async fn download_mod(
     url: &str,
     expected_hashes: &[String],
     download_dir: &Path,
-) -> Result<(), Error> {
+) -> Result<PathBuf, Error> {
     // User-friendly status at info level
     info!("📥 Downloading {}", mod_name);
 
@@ -60,7 +60,7 @@ pub async fn download_mod(
 
     verify_checksum(computed_hash, expected_hashes, &download_path).await?;
 
-    Ok(())
+    Ok(download_path)
 }
 
 async fn download_and_write(
@@ -69,7 +69,7 @@ async fn download_and_write(
 ) -> Result<u64, Error> {
     info!(
         "Start writing data to the destination: {}",
-        download_path.display()
+        replace_home_dir_with_tilde(download_path)
     );
     let mut stream = response.bytes_stream();
     let mut hasher = Xxh64::new(0);
