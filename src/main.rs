@@ -1,4 +1,5 @@
 use clap::Parser;
+use mod_registry::ModRegistryQuery;
 use reqwest::Client;
 use tracing::{debug, info};
 
@@ -122,7 +123,7 @@ async fn main() -> Result<(), Error> {
         Commands::Install(args) => {
             // Fetching the mod information
             let mod_registry = mod_registry::fetch_remote_mod_registry().await?;
-            let mod_info = mod_registry::get_mod_info_by_url(&mod_registry, &args.mod_page_url);
+            let mod_info = mod_registry.get_mod_info_by_url(&args.mod_page_url);
 
             // If the mod is found in the database, check if it is installed or not, if not, install it.
             match mod_info {
@@ -132,18 +133,29 @@ async fn main() -> Result<(), Error> {
 
                     // Check if already installed
                     let installed_mods = list_installed_mods(archive_paths)?;
-                    if installed_mods
+
+                    // Create a vector of mod names.
+                    let installed_names: Vec<_> = installed_mods
                         .into_iter()
-                        .any(|installed| installed.manifest.name == *mod_name)
-                    {
+                        .map(|installed| installed.manifest.name)
+                        .collect();
+
+                    // Check if the target mod_name is in the vector.
+                    if installed_names.contains(mod_name) {
                         info!("You already have [{}] installed.", mod_name);
                         return Ok(());
                     }
 
                     // Install the new mod
                     let client = Client::new();
-                    download::install::install(&client, (mod_name, manifest), &mods_directory)
-                        .await?;
+                    download::install::install(
+                        &client,
+                        (mod_name, manifest),
+                        &mod_registry,
+                        &mods_directory,
+                        installed_names,
+                    )
+                    .await?;
                 }
                 None => {
                     info!("Could not find a mod matching [{}].", &args.mod_page_url);
