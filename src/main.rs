@@ -15,7 +15,7 @@ mod mod_registry;
 
 use cli::{Cli, Commands};
 use error::Error;
-use fileutil::{find_installed_mod_archives, read_updater_blacklist};
+use fileutil::{find_installed_mod_archives, read_updater_blacklist, replace_home_dir_with_tilde};
 use installed_mods::{check_updates, list_installed_mods, remove_blacklisted_mods};
 
 fn setup_logging(verbose: bool) {
@@ -61,9 +61,14 @@ async fn main() -> Result<(), Error> {
 
     // Determine the mods directory.
     let mods_directory = cli.mods_dir.unwrap_or(fileutil::get_mods_directory()?);
+    debug!(
+        "Determined mods directory: {}",
+        replace_home_dir_with_tilde(&mods_directory)
+    );
 
     // Gathering mod paths
     let archive_paths = find_installed_mod_archives(&mods_directory)?;
+    debug!("Number of mod files found: {}", archive_paths.len());
 
     match &cli.command {
         // Show name and version of installed mods
@@ -150,10 +155,11 @@ async fn main() -> Result<(), Error> {
 
                     // Install the new mod
                     let client = Client::new();
+                    let mod_registry = mod_registry.clone();
                     download::install::install(
                         &client,
                         (mod_name, manifest),
-                        &mod_registry,
+                        mod_registry,
                         &mods_directory,
                         installed_names,
                     )

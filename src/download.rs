@@ -97,7 +97,7 @@ async fn download_and_write(
 
     if expected_hashes.contains(&hash_str) {
         info!("✅ Checksum verified!");
-        info!(
+        debug!(
             "Moving the file to the destination: {}",
             replace_home_dir_with_tilde(download_path)
         );
