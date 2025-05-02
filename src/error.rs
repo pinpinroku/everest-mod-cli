@@ -1,6 +1,8 @@
-use std::path::PathBuf;
+use std::{collections::VecDeque, path::PathBuf};
 
 use thiserror::Error;
+
+use crate::installed_mods::ModManifest;
 
 /// The `Error` enum defines all possible error types that can occur in the application.
 #[derive(Debug, Error)]
@@ -61,4 +63,8 @@ pub enum Error {
     /// Missing manifest file in the download path
     #[error("Manifest file not found at path: {0}")]
     MissingManifestFile(PathBuf),
+
+    /// Missing entry in the manifest file "everest.yaml"
+    #[error("Manifest file doesn't have any entries: {0:#?}")]
+    MissingManifestEntry(VecDeque<ModManifest>),
 }

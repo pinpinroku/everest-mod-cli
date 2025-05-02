@@ -37,12 +37,16 @@ pub struct Dependency {
 }
 
 impl ModManifest {
-    /// Parses the mod manifest YAML buffer into a structured `ModManifest` object.
-    pub fn parse_mod_manifest_from_yaml(yaml_buffer: &[u8]) -> Result<Self, Error> {
-        let mut manifest_entries = serde_yaml_ng::from_slice::<VecDeque<ModManifest>>(yaml_buffer)?;
+    /// Parses a YAML buffer to return a value of this type.
+    pub fn from_yaml(yaml_buffer: &[u8]) -> Result<Self, Error> {
+        // NOTE: We always need first entry from this collection since that is the primal mod, so we use the `VecDeque<T>` here instead of the `Vec<T>`.
+        let mut manifest_entries = serde_yaml_ng::from_slice::<VecDeque<Self>>(yaml_buffer)?;
 
-        // Attempt to retrieve the first entry without unnecessary cloning.
-        Ok(manifest_entries.pop_front().unwrap())
+        // Attempt to retrieve the first entry without unnecessary cloning or element shiting.
+        let entry = manifest_entries
+            .pop_front()
+            .ok_or_else(|| Error::MissingManifestEntry(manifest_entries))?;
+        Ok(entry)
     }
 }
 
@@ -132,7 +136,7 @@ pub fn list_installed_mods(archive_paths: Vec<PathBuf>) -> Result<InstalledModLi
         match manifest_content {
             Some(buffer) => {
                 debug!("Manifest file detected. Trying to parse them.");
-                let manifest = ModManifest::parse_mod_manifest_from_yaml(&buffer)?;
+                let manifest = ModManifest::from_yaml(&buffer)?;
                 let mod_info = LocalModInfo::new(archive_path, manifest);
                 installed_mods.push(mod_info);
             }
@@ -318,7 +322,7 @@ mod tests_for_files {
           Version: "1.0.0"
         "#;
 
-        let result = ModManifest::parse_mod_manifest_from_yaml(yaml.as_bytes());
+        let result = ModManifest::from_yaml(yaml.as_bytes());
         assert!(result.is_ok());
         let manifest = result.unwrap();
 

@@ -122,7 +122,7 @@ fn check_dependencies(download_path: &Path) -> Result<Option<HashSet<String>>, E
         .ok_or_else(|| Error::MissingManifestFile(download_path.to_path_buf()))?;
 
     // Parse the manifest file
-    let manifest = ModManifest::parse_mod_manifest_from_yaml(&buffer)?;
+    let manifest = ModManifest::from_yaml(&buffer)?;
     debug!("Manifest content: {:#?}", manifest);
 
     // Retrieve dependencies if available, filtering out "Everest" and "EverestCore"
