@@ -22,7 +22,7 @@ pub struct Cli {
 /// The set of available subcommands for the Everest Mod CLI
 #[derive(Debug, Subcommand)]
 pub enum Commands {
-    /// Install a mod
+    /// Install a mod using the URL
     Install(InstallArgs),
     /// List installed mods
     List,
@@ -35,7 +35,7 @@ pub enum Commands {
 /// Arguments for the `install` subcommand
 #[derive(Debug, Args)]
 pub struct InstallArgs {
-    /// The URL of the page which introduce their mod on the GameBanana
+    /// The URL of the page where the mod is featured on the GameBanana
     pub mod_page_url: String,
 }
 
