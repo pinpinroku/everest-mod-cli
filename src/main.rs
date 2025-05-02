@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use clap::Parser;
 use mod_registry::ModRegistryQuery;
 use reqwest::Client;
@@ -135,7 +137,7 @@ async fn main() -> Result<(), Error> {
                     let installed_mods = list_installed_mods(archive_paths)?;
 
                     // Create a vector of mod names.
-                    let installed_names: Vec<_> = installed_mods
+                    let installed_names: HashSet<_> = installed_mods
                         .into_iter()
                         .map(|installed| installed.manifest.name)
                         .collect();

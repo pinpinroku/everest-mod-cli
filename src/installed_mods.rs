@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Represents the `everest.yaml` manifest file that defines a mod
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, Hash, PartialEq, Eq)]
 pub struct ModManifest {
     #[serde(rename = "Name")]
     pub name: String,
@@ -28,7 +28,7 @@ pub struct ModManifest {
 }
 
 /// Dependency specification for required or optional mod dependencies
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, Hash, PartialEq, Eq)]
 pub struct Dependency {
     #[serde(rename = "Name")]
     pub name: String,
@@ -50,7 +50,7 @@ impl ModManifest {
 pub type InstalledModList = Vec<LocalModInfo>;
 
 /// Information about a locally installed mod
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 pub struct LocalModInfo {
     /// Path to the zip file which contains the mod's assets and manifest
     #[serde(rename = "Filename")]
