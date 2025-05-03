@@ -51,37 +51,29 @@ pub type RemoteModRegistry = HashMap<String, RemoteModInfo>;
 
 // NOTE: This is necessary because direct implementation for std::collection::HashMap is not allowed.
 pub trait ModRegistryQuery {
-    fn get_mod_info_by_name<'a>(&'a self, name: &str) -> Option<(&'a String, &'a RemoteModInfo)>;
-    fn get_mod_info_by_url<'a>(
-        &'a self,
-        game_page_url: &str,
-    ) -> Option<(&'a String, &'a RemoteModInfo)>;
+    fn get_mod_info_by_name(&self, name: &str) -> Option<&RemoteModInfo>;
+    fn find_mod_registry_from_url(&self, mod_id: u32) -> Option<(&String, &RemoteModInfo)>;
 }
 
-// NOTE: If you want to use these method, you need to introduce this trait in the scope
 impl ModRegistryQuery for RemoteModRegistry {
-    /// Gets the mod registry entry that corresponds to the provided name.
-    fn get_mod_info_by_name<'a>(&'a self, name: &str) -> Option<(&'a String, &'a RemoteModInfo)> {
+    /// Gets a mod registry entry that matches the given name.
+    fn get_mod_info_by_name(&self, name: &str) -> Option<&RemoteModInfo> {
         debug!("Getting the mod information matching the name: {}", name);
-        self.get_key_value(name)
+        self.get(name)
     }
 
-    /// Gets the mod registry entry that corresponds to the provided URL.
-    fn get_mod_info_by_url<'a>(
-        &'a self,
-        game_page_url: &str,
-    ) -> Option<(&'a String, &'a RemoteModInfo)> {
+    /// Finds a mod registry that matches the mod id in the given URL.
+    fn find_mod_registry_from_url(&self, mod_id: u32) -> Option<(&String, &RemoteModInfo)> {
         debug!(
-            "Getting the remote mod information by mod page URL: {}",
-            game_page_url
+            "Looking up the remote mod information by extracting mod ID from the given URL: {}",
+            mod_id
         );
-        let id = game_page_url.split('/').next_back()?.parse::<u32>().ok()?;
         self.iter()
-            .find(|(_, manifest)| manifest.gamebanana_id == id)
+            .find(|(_, manifest)| manifest.gamebanana_id == mod_id)
     }
 }
 
-/// Fetching the remote mod registry, then parsed and deserialize into RemoteModRegistry type
+/// Fetches the remote mod registry, then parse and deserialize into the RemoteModRegistry type
 pub async fn fetch_remote_mod_registry() -> Result<RemoteModRegistry, Error> {
     info!("🌐 Fetching online database...");
     let client = reqwest::ClientBuilder::new()
@@ -105,6 +97,7 @@ pub async fn fetch_remote_mod_registry() -> Result<RemoteModRegistry, Error> {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use std::collections::HashMap;
 
@@ -138,8 +131,8 @@ mod tests {
         mod_registry.insert(key2.clone(), mod_info2);
 
         // Test URL that should match gamebanana_id 42
-        let test_url = "https://gamebanana.com/members/42";
-        let result = mod_registry.get_mod_info_by_url(test_url);
+        let id = 42;
+        let result = mod_registry.find_mod_registry_from_url(id);
         assert!(result.is_some());
         let (found_key, found_mod) = result.unwrap();
         // The found mod should have gamebanana_id 42 and the key should be "mod1"
@@ -147,18 +140,9 @@ mod tests {
         assert_eq!(found_key, &key1);
 
         // Test URL that does not match any entry
-        let invalid_url = "https://gamebanana.com/members/12345";
-        let result_invalid = mod_registry.get_mod_info_by_url(invalid_url);
+        let id = 12345;
+        let result_invalid = mod_registry.find_mod_registry_from_url(id);
         assert!(result_invalid.is_none());
-    }
-
-    /// Tests the get_mod_info_from_url function with an invalid URL (cannot parse an id).
-    #[test]
-    fn test_get_mod_info_from_url_invalid_url() {
-        let mod_registry: RemoteModRegistry = HashMap::new();
-        let malformed_url = "not a valid url";
-        let result = mod_registry.get_mod_info_by_url(malformed_url);
-        assert!(result.is_none());
     }
 
     /// Tests the has_matching_hash method for RemoteModInfo.

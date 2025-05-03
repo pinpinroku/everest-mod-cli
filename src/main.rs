@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use clap::Parser;
+use download::install::parse_mod_page_url;
 use mod_registry::ModRegistryQuery;
 use reqwest::Client;
 use tracing::{debug, info};
@@ -48,8 +49,7 @@ fn setup_logging(verbose: bool) {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Error> {
+async fn run() -> Result<(), Error> {
     debug!("Application starts");
 
     let cli = Cli::parse();
@@ -128,9 +128,11 @@ async fn main() -> Result<(), Error> {
 
         // Install a mod by fetching its information from the mod registry.
         Commands::Install(args) => {
-            // Fetching the mod information
+            let mod_id = parse_mod_page_url(&args.mod_page_url)?;
+
+            // Fetches mod information from URL
             let mod_registry = mod_registry::fetch_remote_mod_registry().await?;
-            let mod_info = mod_registry.get_mod_info_by_url(&args.mod_page_url);
+            let mod_info = mod_registry.find_mod_registry_from_url(mod_id);
 
             // If the mod is found in the database, check if it is installed or not, if not, install it.
             match mod_info {
@@ -159,7 +161,7 @@ async fn main() -> Result<(), Error> {
                     download::install::install(
                         &client,
                         (mod_name, manifest),
-                        mod_registry,
+                        &mod_registry,
                         &mods_directory,
                         installed_names,
                     )
@@ -208,4 +210,11 @@ async fn main() -> Result<(), Error> {
     }
 
     Ok(())
+}
+
+#[tokio::main]
+async fn main() {
+    if let Err(err) = run().await {
+        tracing::error!("{}", err)
+    }
 }

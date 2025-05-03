@@ -128,10 +128,9 @@ pub fn list_installed_mods(archive_paths: Vec<PathBuf>) -> Result<InstalledModLi
 
     let start = Instant::now();
     for archive_path in archive_paths {
-        debug!(
-            "Reading the file '{}'",
-            replace_home_dir_with_tilde(&archive_path)
-        );
+        let debug_path = replace_home_dir_with_tilde(&archive_path);
+        debug!("Reading the file '{}'", debug_path);
+
         let manifest_content = read_manifest_file_from_zip(&archive_path)?;
         match manifest_content {
             Some(buffer) => {
@@ -141,14 +140,9 @@ pub fn list_installed_mods(archive_paths: Vec<PathBuf>) -> Result<InstalledModLi
                 installed_mods.push(mod_info);
             }
             None => {
-                // HACK: Collect failed mods in another vector
-                let debug_path = archive_path
-                    .file_name()
-                    .and_then(|path| path.to_str())
-                    .expect("File name should be exist");
                 warn!(
-                    "No mod manifest file (everest.yaml) found in {}.\n\
-                \t# The file might be named 'everest.yml' or located in a subdirectory.\n\
+                    "No mod manifest file (everest.[yaml|yml]) found in {}.\n\
+                \t# The file might be located in a subdirectory.\n\
                 \t# Please contact the mod creator about this issue or just ignore this message.\n\
                 \t# Updates will be skipped for this mod.",
                     debug_path
@@ -157,7 +151,7 @@ pub fn list_installed_mods(archive_paths: Vec<PathBuf>) -> Result<InstalledModLi
         }
     }
     let duration = start.elapsed();
-    debug!("Manifest file scanning takes: {:#?}", duration);
+    debug!("Scanning manifest files took: {:#?}", duration);
 
     // Sort by name
     debug!("Sorting the installed mods by name...");
@@ -203,7 +197,7 @@ fn check_update(
 ) -> Result<Option<AvailableUpdateInfo>, Error> {
     // Look up remote mod info
     let manifest = local_mod.manifest();
-    let (_, remote_mod) = match mod_registry.get_mod_info_by_name(&manifest.name) {
+    let remote_mod = match mod_registry.get_mod_info_by_name(&manifest.name) {
         Some(info) => info,
         None => return Ok(None), // No remote info, skip update check.
     };
@@ -355,7 +349,7 @@ mod tests_for_files {
         let manifest = generate_test_mod_manifest("BlacklistedMod", "1.0.0");
         let archive_path = create_test_mod_archive(mods_dir, &manifest, VALID_MANIFEST_FILE);
 
-        let mut installed_mods = vec![LocalModInfo::new(archive_path.clone(), manifest)];
+        let mut installed_mods = vec![LocalModInfo::new(archive_path.to_path_buf(), manifest)];
         let blacklist: HashSet<PathBuf> = vec![archive_path].into_iter().collect();
 
         let result = remove_blacklisted_mods(&mut installed_mods, &blacklist);

@@ -1,4 +1,4 @@
-use reqwest::Client;
+use reqwest::{Client, Url};
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
@@ -13,11 +13,44 @@ use crate::{
     mod_registry::{ModRegistryQuery, RemoteModInfo, RemoteModRegistry},
 };
 
+/// Parse the given url string, converts it to the mod ID
+pub fn parse_mod_page_url(page_url_str: &str) -> Result<u32, Error> {
+    let page_url =
+        Url::parse(page_url_str).map_err(|_| Error::InvalidUrl(page_url_str.to_owned()))?;
+
+    // Check scheme
+    match page_url.scheme() {
+        "http" | "https" => {}
+        _ => return Err(Error::UnsupportedScheme(page_url_str.to_owned())),
+    }
+
+    // Check host
+    if page_url.host_str() != Some("gamebanana.com") {
+        return Err(Error::InvalidGameBananaUrl(page_url.clone()));
+    }
+
+    // Check path segments
+    let mut segments = page_url
+        .path_segments()
+        .ok_or_else(|| Error::InvalidGameBananaUrl(page_url.clone()))?;
+
+    // Expected path: /mods/12345
+    match (segments.next(), segments.next()) {
+        (Some("mods"), Some(id_str)) => {
+            let id = id_str
+                .parse::<u32>()
+                .map_err(|_| Error::InvalidModId(id_str.to_owned()))?;
+            Ok(id)
+        }
+        _ => Err(Error::InvalidGameBananaUrl(page_url.clone())),
+    }
+}
+
 /// Install a mod
 pub async fn install(
     client: &Client,
     (name, manifest): (&str, &RemoteModInfo),
-    mod_registry: RemoteModRegistry,
+    mod_registry: &RemoteModRegistry,
     download_dir: &Path,
     installed_mod_names: HashSet<String>,
 ) -> Result<(), Error> {
@@ -54,24 +87,24 @@ pub async fn install(
 /// Download all of missing dependencies concurrently
 async fn resolve_dependencies(
     client: &Client,
-    mod_registry: HashMap<String, RemoteModInfo>,
+    mod_registry: &HashMap<String, RemoteModInfo>,
     download_dir: &Path,
     missing_dependencies: Vec<&String>,
 ) -> Result<(), Error> {
     let mut handles = Vec::with_capacity(missing_dependencies.len());
 
     for dependency in missing_dependencies {
-        if let Some((mod_name, manifest)) = mod_registry.get_mod_info_by_name(dependency) {
-            let mod_name = mod_name.clone();
+        if let Some(manifest) = mod_registry.get_mod_info_by_name(dependency) {
+            let dependency = dependency.clone();
             let manifest = manifest.clone();
             let client = client.clone();
             let download_dir = download_dir.to_path_buf();
-            debug!("Manifest of dependency: {}\n{:#?}", mod_name, manifest);
+            debug!("Manifest of dependency: {}\n{:#?}", dependency, manifest);
 
             let handle = tokio::spawn(async move {
                 download::download_mod(
                     &client,
-                    &mod_name,
+                    &dependency,
                     &manifest.download_url,
                     &manifest.checksums,
                     &download_dir,
@@ -138,5 +171,40 @@ fn check_dependencies(download_path: &Path) -> Result<Option<HashSet<String>>, E
     } else {
         warn!("No dependencies found. This is weird. Even 'Everest' is not listed.");
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_valid_url() {
+        let url = "https://gamebanana.com/mods/12345";
+        assert_eq!(parse_mod_page_url(url).unwrap(), 12345);
+    }
+
+    #[test]
+    fn test_invalid_scheme() {
+        let url = "ftp://gamebanana.com/mods/12345";
+        assert!(parse_mod_page_url(url).is_err());
+    }
+
+    #[test]
+    fn test_invalid_host() {
+        let url = "https://example.com/mods/12345";
+        assert!(parse_mod_page_url(url).is_err());
+    }
+
+    #[test]
+    fn test_missing_id() {
+        let url = "https://gamebanana.com/mods/";
+        assert!(parse_mod_page_url(url).is_err());
+    }
+
+    #[test]
+    fn test_non_numeric_id() {
+        let url = "https://gamebanana.com/mods/abc";
+        assert!(parse_mod_page_url(url).is_err());
     }
 }

@@ -1,5 +1,6 @@
 use std::{collections::VecDeque, path::PathBuf};
 
+use reqwest::Url;
 use thiserror::Error;
 
 use crate::installed_mods::ModManifest;
@@ -28,26 +29,26 @@ pub enum Error {
     TaskJoin(#[from] tokio::task::JoinError),
 
     /// Multiple update failures
-    #[error("Multiple update errors occurred: {0:?}")]
+    #[error("multiple update errors occurred: {0:?}")]
     MultipleUpdate(Vec<Error>),
 
     /// Error indicating that the home directory could not be determined
     #[error(
-        "Could not determine home directory location!\
-        Please specify the mods directory using --mods-dir"
+        "could not determine home directory location!\
+        please specify the mods directory using --mods-dir"
     )]
     CouldNotDetermineHomeDir,
 
     /// Error indicating that the mods directory is missing
     #[error(
-        "No mods directory found.\
-        Please verify that Everest is properly installed"
+        "no mods directory found.\
+        please verify that Everest is properly installed"
     )]
     MissingModsDirectory,
 
     /// Error indicating that a checksum verification failed for a specific file
     #[error(
-        "Checksum verification failed for '{file}':\
+        "checksum verification failed for '{file}':\
         computed checksum '{computed}' does not match\
         expected checksums {expected:#?}"
     )]
@@ -61,10 +62,26 @@ pub enum Error {
     },
 
     /// Missing manifest file in the download path
-    #[error("Manifest file not found at path: {0}")]
+    #[error("manifest file not found at path: {0}")]
     MissingManifestFile(PathBuf),
 
     /// Missing entry in the manifest file "everest.yaml"
-    #[error("Manifest file doesn't have any entries: {0:#?}")]
+    #[error("manifest file doesn't have any entries: {0:#?}")]
     MissingManifestEntry(VecDeque<ModManifest>),
+
+    /// Invalid URL
+    #[error("invalid URL: {0}")]
+    InvalidUrl(String),
+
+    /// Unsupported scheme
+    #[error("unsupported scheme: {0} (expected 'http' or 'https')")]
+    UnsupportedScheme(String),
+
+    /// Invalid GameBanana URL
+    #[error("invalid GameBanana URL :{0:?}")]
+    InvalidGameBananaUrl(Url),
+
+    /// Invalid Mod ID
+    #[error("invalid Mod ID :{0} (expected unsigned 32 bit integer)")]
+    InvalidModId(String),
 }
