@@ -132,7 +132,7 @@ async fn run() -> Result<(), Error> {
 
             // Fetches mod information from URL
             let mod_registry = mod_registry::fetch_remote_mod_registry().await?;
-            let mod_info = mod_registry.find_mod_registry_from_url(mod_id);
+            let mod_info = mod_registry.find_mod_registry_by_id(mod_id);
 
             // If the mod is found in the database, check if it is installed or not, if not, install it.
             match mod_info {
