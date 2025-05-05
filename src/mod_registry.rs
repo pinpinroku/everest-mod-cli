@@ -13,6 +13,9 @@ pub struct RemoteModInfo {
     /// Download link for the mod file
     #[serde(rename = "URL")]
     pub download_url: String,
+    /// File size
+    #[serde(rename = "Size")]
+    pub file_size: u64,
     /// xxHash checksums for the file
     #[serde(rename = "xxHash")]
     pub checksums: Vec<String>,

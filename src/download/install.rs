@@ -1,5 +1,7 @@
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use reqwest::{Client, Url};
 use std::{
+    borrow::Cow,
     collections::{HashMap, HashSet},
     path::Path,
 };
@@ -53,17 +55,25 @@ pub async fn install(
     mod_registry: &RemoteModRegistry,
     download_dir: &Path,
     installed_mod_names: HashSet<String>,
+    pb: &ProgressBar,
 ) -> Result<(), Error> {
+    let style = super::pb_style::new();
+    pb.set_style(style);
+
+    let msg = super::pb_style::truncate_msg(name);
+    pb.set_message(msg.into_owned());
+
     let download_path = download::download_mod(
         client,
         name,
         &manifest.download_url,
         &manifest.checksums,
         download_dir,
+        pb,
     )
     .await?;
 
-    info!(
+    debug!(
         "[{}] is now installed in {}.",
         name,
         replace_home_dir_with_tilde(&download_path)
@@ -77,7 +87,7 @@ pub async fn install(
             return Ok(());
         }
 
-        info!("Start downloading the dependencies...");
+        info!("Start downloading the dependencies...\n");
         resolve_dependencies(client, mod_registry, download_dir, missing_dependencies).await?;
     }
 
@@ -91,10 +101,20 @@ async fn resolve_dependencies(
     download_dir: &Path,
     missing_dependencies: Vec<&String>,
 ) -> Result<(), Error> {
+    let mp = MultiProgress::new();
+    let style = ProgressStyle::with_template(
+        "{wide_msg} {total_bytes:>9.1.cyan/blue} {bytes_per_sec:>12.2} {eta_precise:>9} [{bar:>40}] {percent:>4}%",
+    )
+    .unwrap_or_else(|_| ProgressStyle::default_bar())
+    .progress_chars("#>-");
+
     let mut handles = Vec::with_capacity(missing_dependencies.len());
 
     for dependency in missing_dependencies {
         if let Some(manifest) = mod_registry.get_mod_info_by_name(dependency) {
+            let mp = mp.clone();
+            let style = style.clone();
+
             let dependency = dependency.clone();
             let manifest = manifest.clone();
             let client = client.clone();
@@ -102,12 +122,25 @@ async fn resolve_dependencies(
             debug!("Manifest of dependency: {}\n{:#?}", dependency, manifest);
 
             let handle = tokio::spawn(async move {
+                let total_size = super::get_file_size(&client, &manifest.download_url).await?;
+                let pb = mp.add(ProgressBar::new(total_size));
+                pb.set_style(style);
+                // If the name is too long, truncate it and add an ellipsis at the end.
+                let max_size = 40;
+                let msg: Cow<str> = if dependency.len() > max_size {
+                    Cow::Owned(format!("{}...", &dependency[..max_size - 3]))
+                } else {
+                    Cow::Borrowed(&dependency)
+                };
+                pb.set_message(msg.to_string());
+
                 download::download_mod(
                     &client,
                     &dependency,
                     &manifest.download_url,
                     &manifest.checksums,
                     &download_dir,
+                    &pb,
                 )
                 .await
             });
@@ -149,7 +182,7 @@ async fn resolve_dependencies(
 
 /// Check for dependencies, if found return `HashSet<String>`, otherwise return `None`.
 fn check_dependencies(download_path: &Path) -> Result<Option<HashSet<String>>, Error> {
-    info!("Checking for missing dependencies...");
+    info!("\nChecking for missing dependencies...");
     // Attempt to read the manifest file. If it doesn't exist, return an error.
     let buffer = read_manifest_file_from_zip(download_path)?
         .ok_or_else(|| Error::MissingManifestFile(download_path.to_path_buf()))?;
