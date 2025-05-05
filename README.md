@@ -126,20 +126,20 @@ If there are missing dependencies, it will automatically download and install th
 ```bash
 everest-mod-cli install "https://gamebanana.com/mods/592695"
 # 🌐 Fetching online database...
-# 🍓 kit                                                                          5.55 MiB  21.89 KiB/s  00:00:00 [########################################]  100%
+# 🍓 kit                5.55 MiB  21.89 KiB/s  00:00:00 [#######################]  100%
 # Checking for missing dependencies...
 # Start downloading the dependencies...
 # 
-# 🍓 CommunalHelper                                                              19.25 MiB   4.40 MiB/s  00:00:00 [########################################]  100%
-# 🍓 GravityHelper                                                              706.45 KiB  97.16 KiB/s  00:00:00 [########################################]  100%
-# 🍓 OutbackHelper                                                               45.12 KiB  61.97 KiB/s  00:00:00 [########################################]  100%
-# 🍓 VivHelper                                                                    6.24 MiB   2.54 MiB/s  00:00:00 [########################################]  100%
-# 🍓 AdventureHelper                                                             86.87 KiB  86.80 KiB/s  00:00:00 [########################################]  100%
-# 🍓 MaxHelpingHand                                                             987.20 KiB 594.86 KiB/s  00:00:00 [########################################]  100%
-# 🍓 ShroomHelper                                                                 1.74 MiB   1.15 MiB/s  00:00:00 [########################################]  100%
-# 🍓 VortexHelper                                                                 2.09 MiB   1.36 MiB/s  00:00:00 [########################################]  100%
-# 🍓 XaphanHelper                                                                 6.62 MiB   5.01 MiB/s  00:00:00 [########################################]  100%
-# 🍓 DJMapHelper                                                                422.93 KiB 629.41 KiB/s  00:00:00 [########################################]  100%
+# 🍓 CommunalHelper    19.25 MiB   4.40 MiB/s  00:00:00 [#######################]  100%
+# 🍓 GravityHelper    706.45 KiB  97.16 KiB/s  00:00:00 [#######################]  100%
+# 🍓 OutbackHelper     45.12 KiB  61.97 KiB/s  00:00:00 [#######################]  100%
+# 🍓 VivHelper          6.24 MiB   2.54 MiB/s  00:00:00 [#######################]  100%
+# 🍓 AdventureHelper   86.87 KiB  86.80 KiB/s  00:00:00 [#######################]  100%
+# 🍓 MaxHelpingHand   987.20 KiB 594.86 KiB/s  00:00:00 [#######################]  100%
+# 🍓 ShroomHelper       1.74 MiB   1.15 MiB/s  00:00:00 [#######################]  100%
+# 🍓 VortexHelper       2.09 MiB   1.36 MiB/s  00:00:00 [#######################]  100%
+# 🍓 XaphanHelper       6.62 MiB   5.01 MiB/s  00:00:00 [#######################]  100%
+# 🍓 DJMapHelper      422.93 KiB 629.41 KiB/s  00:00:00 [#######################]  100%
 # All required dependencies installed successfully!
 ```
 
@@ -150,36 +150,43 @@ everest-mod-cli install "https://gamebanana.com/mods/592695"
 Check for available updates for installed mods.
 ```bash
 everest-mod-cli update
+# 🌐 Fetching online database...
 # Checking mod updates...
 # Available updates:
 # 
-# StrawberryJam2021
-#  - Current version: 1.0.11
-#  - Available version: 1.0.12
+# UnderDragon's Repository
+#  - Current version: 2.5.3
+#  - Available version: 2.5.4
 # 
+# califonia dreamin'
+#  - Current version: 0.0.1
+#  - Available version: 0.0.1
+#
 # Run with --install to install these updates
 ```
 
 Install available updates.
 ```bash
 everest-mod-cli update --install
+# 🌐 Fetching online database...
 # Checking mod updates...
 # Available updates:
 # 
-# StrawberryJam2021
-#  - Current version: 1.0.11
-#  - Available version: 1.0.12
+# UnderDragon's Repository
+#  - Current version: 2.5.3
+#  - Available version: 2.5.4
+# 
+# califonia dreamin'
+#  - Current version: 0.0.1
+#  - Available version: 0.0.1
 # 
 # Installing updates...
-# 
-# Updating StrawberryJam2021...
-#   [00:03:26] [################################################] 91.22 MiB/91.22 MiB (0s)
-#   Verifying checksum...
-#   Checksum verified!
-#   Updated StrawberryJam2021 to version 1.0.12
-# 
+# 🍓 califonia dreamin'          6.91 MiB 254.93 KiB/s  00:00:00 [######################]  100%
+# 🍓 UnderDragon's Repository   29.70 MiB 683.38 KiB/s  00:00:00 [######################]  100%
 # All updates installed successfully!
 ```
+
+> Modders sometimes forget to increase the version number but the file change will be detected by the checksum.
 
 ## Option
 
