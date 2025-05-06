@@ -16,7 +16,7 @@ use crate::{
     mod_registry::{ModRegistryQuery, RemoteModInfo, RemoteModRegistry},
 };
 
-/// Parse the given url string, converts it to the mod ID
+/// Parses the given url string, converts it to the mod ID.
 pub fn parse_mod_page_url(page_url_str: &str) -> Result<u32, Error> {
     let page_url =
         Url::parse(page_url_str).map_err(|_| Error::InvalidUrl(page_url_str.to_owned()))?;
@@ -49,7 +49,7 @@ pub fn parse_mod_page_url(page_url_str: &str) -> Result<u32, Error> {
     }
 }
 
-/// Install a mod
+/// Installs a mod and checks for the missing dependencies, if missing install them.
 pub async fn install(
     client: &Client,
     (name, manifest): (&str, &RemoteModInfo),
@@ -64,7 +64,7 @@ pub async fn install(
     let msg = super::pb_style::truncate_msg(name);
     pb.set_message(msg.into_owned());
 
-    let download_path = download::download_mod(
+    let downloaded_file_path = download::download_mod(
         client,
         name,
         &manifest.download_url,
@@ -77,10 +77,10 @@ pub async fn install(
     debug!(
         "[{}] is now installed in {}.",
         name,
-        replace_home_dir_with_tilde(&download_path)
+        replace_home_dir_with_tilde(&downloaded_file_path)
     );
 
-    if let Some(dependencies) = check_dependencies(&download_path)? {
+    if let Some(dependencies) = check_dependencies(&downloaded_file_path)? {
         debug!("Filetering out already installed dependencies.");
         let missing_dependencies: Vec<_> = dependencies.difference(&installed_mod_names).collect();
         if missing_dependencies.is_empty() {
@@ -95,31 +95,34 @@ pub async fn install(
     Ok(())
 }
 
-/// Download all of missing dependencies concurrently
+/// Downloads all missing dependencies concurrently.
 async fn resolve_dependencies(
     client: &Client,
     mod_registry: &HashMap<String, RemoteModInfo>,
     download_dir: &Path,
-    missing_dependencies: Vec<&String>,
+    missing_dependency_names: Vec<&String>,
 ) -> Result<(), Error> {
     let mp = MultiProgress::new();
     let style = super::pb_style::new();
 
     let semaphore = Arc::new(Semaphore::new(6));
-    let mut handles = Vec::with_capacity(missing_dependencies.len());
+    let mut handles = Vec::with_capacity(missing_dependency_names.len());
 
-    for dependency in missing_dependencies {
-        if let Some(manifest) = mod_registry.get_mod_info_by_name(dependency) {
+    for dependency_name in missing_dependency_names {
+        if let Some(manifest) = mod_registry.get_mod_info_by_name(dependency_name) {
             let semaphore = Arc::clone(&semaphore);
 
             let mp = mp.clone();
             let style = style.clone();
 
-            let dependency = dependency.clone();
+            let dependency_name = dependency_name.clone();
             let manifest = manifest.clone();
             let client = client.clone();
             let download_dir = download_dir.to_path_buf();
-            debug!("Manifest of dependency: {}\n{:#?}", dependency, manifest);
+            debug!(
+                "Manifest of dependency: {}\n{:#?}",
+                dependency_name, manifest
+            );
 
             let handle = tokio::spawn(async move {
                 let _permit = semaphore.acquire().await?;
@@ -128,12 +131,12 @@ async fn resolve_dependencies(
                 let pb = mp.add(ProgressBar::new(total_size));
                 pb.set_style(style);
 
-                let msg = super::pb_style::truncate_msg(&dependency);
+                let msg = super::pb_style::truncate_msg(&dependency_name);
                 pb.set_message(msg.to_string());
 
-                let saved_path = download::download_mod(
+                let downloaded_file_path = download::download_mod(
                     &client,
-                    &dependency,
+                    &dependency_name,
                     &manifest.download_url,
                     &manifest.checksums,
                     &download_dir,
@@ -143,20 +146,20 @@ async fn resolve_dependencies(
 
                 drop(_permit);
 
-                Ok(saved_path)
+                Ok(downloaded_file_path)
             });
 
             handles.push(handle);
         } else {
             warn!(
                 "Could not find information about the mod '{}'.\n\
-                    The modder might have misspelled the name.",
-                dependency
+                    The modder may have misspelled the name.",
+                dependency_name
             );
         }
     }
 
-    // Collect all errors instead of stopping at the first one
+    // Collects all errors instead of stopping at the first one.
     let mut errors = Vec::new();
     for handle in handles {
         match handle.await {

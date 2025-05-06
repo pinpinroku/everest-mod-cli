@@ -9,7 +9,7 @@ use crate::{
     installed_mods::AvailableUpdateInfo,
 };
 
-/// Update a mod
+/// Updates a mod, deletes the previous version of the file if the update succeeds.
 async fn update(
     client: &Client,
     update_info: &AvailableUpdateInfo,
@@ -42,11 +42,11 @@ async fn update(
     Ok(())
 }
 
-/// Update multiple mods concurrently
+/// Updates all mods that can be updated concurrently.
 pub async fn update_multiple_mods(
     client: &Client,
     download_dir: &Path,
-    updates: Vec<AvailableUpdateInfo>,
+    available_updates: Vec<AvailableUpdateInfo>,
 ) -> Result<(), Error> {
     let mp = MultiProgress::new();
     let style = super::pb_style::new();
@@ -54,7 +54,7 @@ pub async fn update_multiple_mods(
     let semaphore = Arc::new(Semaphore::new(6));
     let mut handles = Vec::new();
 
-    for update_info in updates {
+    for available_update in available_updates {
         let semaphore = Arc::clone(&semaphore);
 
         let mp = mp.clone();
@@ -66,14 +66,14 @@ pub async fn update_multiple_mods(
         let handle = tokio::spawn(async move {
             let _permit = semaphore.acquire().await?;
 
-            let total_size = super::get_file_size(&client, &update_info.url).await?;
+            let total_size = super::get_file_size(&client, &available_update.url).await?;
             let pb = mp.add(ProgressBar::new(total_size));
             pb.set_style(style);
 
-            let msg = super::pb_style::truncate_msg(&update_info.name);
+            let msg = super::pb_style::truncate_msg(&available_update.name);
             pb.set_message(msg.to_string());
 
-            update(&client, &update_info, &download_dir, &pb).await?;
+            update(&client, &available_update, &download_dir, &pb).await?;
 
             drop(_permit);
 
@@ -83,7 +83,7 @@ pub async fn update_multiple_mods(
         handles.push(handle);
     }
 
-    // Collect all errors instead of stopping at the first one
+    // Collects all errors instead of stopping at the first one.
     let mut errors = Vec::new();
     for handle in handles {
         match handle.await {

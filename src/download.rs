@@ -1,6 +1,6 @@
 use futures_util::StreamExt;
 use indicatif::ProgressBar;
-use reqwest::Client;
+use reqwest::{Client, Response};
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 use tokio::io::AsyncWriteExt;
@@ -51,7 +51,7 @@ pub async fn download_mod(
     let response = client.get(url).send().await?.error_for_status()?;
     debug!("Response status: {}", response.status());
 
-    let filename = util::determine_filename(response.url(), response.headers());
+    let filename = download_util::determine_filename(response.url(), response.headers());
     let download_path = download_dir.join(&filename);
 
     debug!("Full path: {}", replace_home_dir_with_tilde(&download_path));
@@ -64,7 +64,7 @@ pub async fn download_mod(
 
 // Writes all bytes to the temporary file, verifies the checksum when the write is complete, and then moves them to the destination.
 async fn download_and_write(
-    response: reqwest::Response,
+    response: Response,
     download_path: &Path,
     expected_hashes: &[String],
     pb: &ProgressBar,
@@ -114,6 +114,7 @@ async fn download_and_write(
     }
 }
 
+/// Style configurations of a progress bar.
 mod pb_style {
     use indicatif::ProgressStyle;
     use std::borrow::Cow;
@@ -166,8 +167,7 @@ mod pb_style {
 
         #[test]
         fn test_truncate_msg_with_truncation() {
-            let original =
-                "This is a very long message that definitely exceeds the maximum allowed length.";
+            let original = "Long Name Helper by Helen, Helen's Helper, hELPER"; // 50 chars
             let result = truncate_msg(original);
             // Expected: first (MAX_MSG_LENGTH - ELLIPSIS.len()) characters plus ELLIPSIS.
             let expected = format!(
@@ -188,18 +188,15 @@ mod pb_style {
 }
 
 /// Utility functions for determining filenames and handling mod download metadata.
-mod util {
+mod download_util {
     use reqwest::{Url, header::HeaderMap};
     use uuid::Uuid;
 
     /// Determines the most appropriate filename for a downloaded mod using the URL and headers.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `url`: The URL from which to extract the filename.
     /// - `headers`: The HTTP headers from which to extract the ETag.
-    ///
-    /// # Returns
-    /// - `String`: The determined filename.
     pub fn determine_filename(url: &Url, headers: &HeaderMap) -> String {
         extract_filename_from_url(url)
             .or_else(|| extract_filename_from_etag(headers))
