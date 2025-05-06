@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Represents the `everest.yaml` manifest file that defines a mod.
-#[derive(Debug, Deserialize, Serialize, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, Hash, PartialEq, Eq)]
 pub struct ModManifest {
     #[serde(rename = "Name")]
     pub name: String,
@@ -246,21 +246,18 @@ pub fn remove_blacklisted_mods(
 
 #[cfg(test)]
 mod tests_for_files {
-    use std::io::Write;
-    use std::path::Path;
+    use std::{io::Write, path::Path};
 
     use super::*;
-    use tempfile::tempdir;
+    use tempfile::{NamedTempFile, tempdir};
 
-    const VALID_MANIFEST_FILE: &str = "everest.yaml";
+    const MANIFEST_FILE_NAME: &str = "everest.yaml";
 
     fn generate_test_mod_manifest(name: &str, version: &str) -> ModManifest {
         ModManifest {
             name: name.to_string(),
             version: version.to_string(),
-            dll: None,
-            dependencies: None,
-            optional_dependencies: None,
+            ..Default::default()
         }
     }
 
@@ -285,10 +282,10 @@ mod tests_for_files {
     }
 
     #[test]
-    fn test_parse_mod_manifest_from_yaml() {
+    fn test_from_yaml_parse_valid_manifest() {
         let yaml = r#"
         - Name: TestMod
-          Version: "1.0.0"
+          Version: 1.0.0
         "#;
 
         let result = ModManifest::from_yaml(yaml.as_bytes());
@@ -300,20 +297,44 @@ mod tests_for_files {
     }
 
     #[test]
-    fn test_list_installed_mods() {
+    fn test_from_yaml_parse_invalid_manifest() {
+        let yaml = r#"
+        TestMod
+          Version: 1.0.0
+        "#;
+
+        let result = ModManifest::from_yaml(yaml.as_bytes());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_load_local_mods_with_manifest() {
         let temp_dir = tempdir().unwrap();
         let mods_dir = temp_dir.path();
         let manifest = generate_test_mod_manifest("TestMod", "1.0.0");
-        let path = create_test_mod_archive(mods_dir, &manifest, VALID_MANIFEST_FILE);
+        let path = create_test_mod_archive(mods_dir, &manifest, MANIFEST_FILE_NAME);
 
         let archive_paths = vec![path];
 
         let result = load_local_mods(archive_paths);
         assert!(result.is_ok());
 
-        let installed_mods = result.unwrap();
-        assert_eq!(installed_mods.len(), 1);
-        assert_eq!(installed_mods[0].manifest.name, "TestMod");
+        let local_mods = result.unwrap();
+        assert_eq!(local_mods.len(), 1);
+        assert_eq!(local_mods[0].manifest.name, "TestMod");
+    }
+
+    #[test]
+    fn test_load_local_mods_without_manifest() {
+        let path = NamedTempFile::with_suffix(".zip")
+            .unwrap()
+            .path()
+            .to_path_buf();
+
+        let archive_paths = vec![path];
+
+        let result = load_local_mods(archive_paths);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -322,7 +343,7 @@ mod tests_for_files {
         let mods_dir = temp_dir.path();
 
         let manifest = generate_test_mod_manifest("BlacklistedMod", "1.0.0");
-        let archive_path = create_test_mod_archive(mods_dir, &manifest, VALID_MANIFEST_FILE);
+        let archive_path = create_test_mod_archive(mods_dir, &manifest, MANIFEST_FILE_NAME);
 
         let mut installed_mods = vec![LocalMod::new(archive_path.to_path_buf(), manifest)];
         let blacklist: HashSet<PathBuf> = vec![archive_path].into_iter().collect();
