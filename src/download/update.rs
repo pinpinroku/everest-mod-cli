@@ -19,13 +19,13 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct AvailableUpdate {
     /// The Mod name
-    pub name: String,
+    name: String,
     /// Download URL of the Mod
-    pub url: String,
+    url: String,
     /// xxHashes of the file
-    pub hashes: Vec<String>,
+    hashes: Vec<String>,
     /// Path to the current version of the mod
-    pub existing_path: PathBuf,
+    existing_path: PathBuf,
 }
 
 /// Checks for an available update for a mod.
