@@ -105,12 +105,10 @@ pub async fn check_updates(
         let semaphore = Arc::clone(&semaphore);
         let mod_registry = Arc::clone(&mod_registry);
         let handle = tokio::spawn(async move {
-            {
-                let _permit = semaphore.acquire().await.unwrap();
-                let result = check_update(local_mod, mod_registry).await?;
-                drop(_permit);
-                Ok(result)
-            }
+            let _permit = semaphore.acquire().await?;
+            let result = check_update(local_mod, mod_registry).await?;
+            drop(_permit);
+            Ok(result)
         });
         handles.push(handle);
     }
