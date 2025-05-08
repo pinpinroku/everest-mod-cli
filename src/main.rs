@@ -1,7 +1,7 @@
 use clap::Parser;
 use indicatif::ProgressBar;
 use reqwest::Client;
-use std::collections::HashSet;
+use std::{collections::HashSet, time::Duration};
 use tracing::{debug, info};
 
 mod cli;
@@ -13,13 +13,9 @@ mod local;
 mod mod_registry;
 
 use cli::{Cli, Commands};
-use download::{
-    install::parse_mod_page_url,
-    update::{self, check_updates},
-};
+use download::{install::parse_mod_page_url, update};
 use error::Error;
-use fileutil::{find_installed_mod_archives, read_updater_blacklist, replace_home_dir_with_tilde};
-use local::remove_blacklisted_mods;
+use fileutil::{find_installed_mod_archives, replace_home_dir_with_tilde};
 use mod_registry::ModRegistryQuery;
 
 fn setup_logging(verbose: bool) {
@@ -141,16 +137,16 @@ async fn run() -> Result<(), Error> {
                     debug!("Matched entry detail: {:#?}", manifest);
 
                     // Check if already installed
-                    let installed_mods = local::load_local_mods(archive_paths)?;
+                    let local_mods = local::load_local_mods(archive_paths)?;
 
                     // Create a vector of mod names.
-                    let installed_names: HashSet<_> = installed_mods
+                    let installed_mod_names: HashSet<_> = local_mods
                         .into_iter()
                         .map(|installed| installed.manifest.name)
                         .collect();
 
                     // Check if the target mod_name is in the vector.
-                    if installed_names.contains(mod_name) {
+                    if installed_mod_names.contains(mod_name) {
                         info!("You already have [{}] installed.", mod_name);
                         return Ok(());
                     }
@@ -164,7 +160,7 @@ async fn run() -> Result<(), Error> {
                         (mod_name, manifest),
                         &mod_registry,
                         &mods_directory,
-                        installed_names,
+                        installed_mod_names,
                         &pb,
                     )
                     .await?;
@@ -176,23 +172,23 @@ async fn run() -> Result<(), Error> {
         }
 
         Commands::Update(args) => {
+            // Filter installed mods according to the `updaterblacklist.txt`
+            let mut local_mods = local::load_local_mods(archive_paths)?;
+            let blacklist = fileutil::read_updater_blacklist(&mods_directory)?;
+            local::remove_blacklisted_mods(&mut local_mods, &blacklist);
+
             // Update installed mods by checking for available updates in the mod registry.
             let mod_registry = mod_registry::fetch_remote_mod_registry().await?;
 
-            // Filter installed mods by using the blacklist
-            let mut installed_mods = local::load_local_mods(archive_paths)?;
-            let blacklist = read_updater_blacklist(&mods_directory)?;
-            remove_blacklisted_mods(&mut installed_mods, &blacklist)?;
-
-            let available_updates = check_updates(installed_mods, mod_registry).await?;
+            let available_updates = update::check_updates(local_mods, mod_registry).await?;
             if available_updates.is_empty() {
-                info!("All mods are up to date!");
+                tracing::info!("All mods are up to date!");
             } else if args.install {
-                info!("\nInstalling updates...");
-                let client = Client::new();
+                tracing::info!("\nInstalling updates...");
+                let client = Client::builder().timeout(Duration::from_secs(30)).build()?;
                 update::update_multiple_mods(&client, &mods_directory, available_updates).await?;
             } else {
-                info!("\nRun with --install to install these updates");
+                tracing::info!("\nRun with --install to install these updates");
             }
         }
     }

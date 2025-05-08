@@ -84,24 +84,24 @@ async fn check_update(
 /// Check available updates for all installed mods.
 ///
 /// # Arguments
-/// * `installed_mods` - A list of information about installed mods.
+/// * `local_mods` - A list of information about local mods.
 /// * `mod_registry` - Registry containing remote mod information.
 ///
 /// # Returns
 /// * `Ok(Vec<AvailableUpdateInfo>)` - List of available updates for mods.
 /// * `Err(Error)` - If there are issues fetching or computing update information.
 pub async fn check_updates(
-    installed_mods: Vec<LocalMod>,
+    local_mods: Vec<LocalMod>,
     mod_registry: RemoteModRegistry,
 ) -> Result<Vec<AvailableUpdate>, Error> {
     let start = std::time::Instant::now();
-    tracing::info!("Starting update check for {} mods", installed_mods.len());
+    tracing::info!("Starting update check for {} mods", local_mods.len());
 
     let mod_registry = Arc::new(mod_registry);
     let semaphore = Arc::new(Semaphore::new(64)); // Optimal limits for modern linux system
 
-    let mut handles = Vec::with_capacity(installed_mods.len());
-    for local_mod in installed_mods {
+    let mut handles = Vec::with_capacity(local_mods.len());
+    for local_mod in local_mods {
         let semaphore = Arc::clone(&semaphore);
         let mod_registry = Arc::clone(&mod_registry);
         let handle = tokio::spawn(async move {

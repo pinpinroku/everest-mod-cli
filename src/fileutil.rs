@@ -4,7 +4,7 @@ use std::{
     collections::HashSet,
     env,
     fs::{self, File},
-    io::{BufRead, BufReader, Read},
+    io::{BufRead, BufReader, ErrorKind, Read},
     path::{Path, PathBuf},
 };
 
@@ -162,7 +162,7 @@ pub async fn hash_file(file_path: &Path) -> Result<String, Error> {
     Ok(hash_str)
 }
 
-/// Reads the updater blacklist file from the specified mods directory and returns a set of archive file paths.
+/// Reads the updater blacklist file from the specified mods directory and returns a set of file paths.
 ///
 /// # Arguments
 /// * `mods_directory` - A reference to the `Path` where the updater blacklist file is stored.
@@ -178,7 +178,7 @@ pub fn read_updater_blacklist(mods_directory: &Path) -> Result<HashSet<PathBuf>,
     let file = match File::open(path) {
         Ok(file) => file,
         Err(err) => match err.kind() {
-            std::io::ErrorKind::NotFound => return Ok(HashSet::new()),
+            ErrorKind::NotFound => return Ok(HashSet::new()),
             _ => return Err(Error::Io(err)),
         },
     };
@@ -192,17 +192,16 @@ pub fn read_updater_blacklist(mods_directory: &Path) -> Result<HashSet<PathBuf>,
         let line = line_result?;
         let trimmed = line.trim();
         if !trimmed.is_empty() && !trimmed.starts_with('#') {
+            // NOTE: Generates the full paths by joining the filenames since it is easier to compare them as full paths.
             let filename = mods_directory.join(trimmed);
             filenames.insert(filename);
         }
     }
-    debug!(
-        "Detected filenames: {:#?}",
-        filenames
-            .iter()
-            .filter_map(|filename| filename.file_name())
-            .collect::<HashSet<_>>()
-    );
+
+    filenames
+        .iter()
+        .filter_map(|filename| filename.file_name())
+        .for_each(|name| tracing::debug!("{}", name.to_string_lossy()));
 
     Ok(filenames)
 }
