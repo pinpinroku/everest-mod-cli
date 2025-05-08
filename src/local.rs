@@ -9,7 +9,7 @@ use tracing::debug;
 
 use crate::{
     error::Error,
-    fileutil::{hash_file, read_manifest_file_from_archive},
+    fileutil::{self, hash_file, read_manifest_file_from_archive},
 };
 
 /// Represents the `everest.yaml` manifest file that defines a mod.
@@ -94,7 +94,10 @@ impl Generatable for LocalMod {
     async fn checksum(&self) -> Result<&str, Error> {
         self.checksum
             .get_or_try_init(async || {
-                tracing::debug!("Computing checksum for {}", self.file_path.display());
+                tracing::debug!(
+                    "Computing checksum for {}",
+                    fileutil::replace_home_dir_with_tilde(&self.file_path)
+                );
                 let computed_hash = hash_file(&self.file_path).await?;
                 Ok(computed_hash)
             })
