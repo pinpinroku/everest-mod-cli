@@ -132,26 +132,18 @@ pub fn load_local_mods(archive_paths: Vec<PathBuf>) -> Result<Vec<LocalMod>, Err
     Ok(local_mods)
 }
 
-/// Removes mods whose archive paths match entries in the updater blacklist from the provided vector.
+/// Removes LocalMod whose file path matches any blacklisted path from the given vector.
+///
+/// If the given collection is empty, this function does nothing.
 ///
 /// # Arguments
-/// * `installed_mods` - A mutable reference to a vector of installed mods
-/// * `blacklist` - A reference to the `HashSet` which stored full path of the blacklisted files
-///
-/// # Returns
-/// * `Result<(), Error>` - Result indicating success or error during blacklist processing
+/// * `local_mods` - A mutable reference of the vector which stored LocalMods
+/// * `blacklisted_paths` - A reference to the `HashSet` which stored **full path** of the blacklisted files
 pub fn remove_blacklisted_mods(
-    installed_mods: &mut Vec<LocalMod>,
-    blacklist: &HashSet<PathBuf>,
-) -> Result<(), Error> {
-    if blacklist.is_empty() {
-        return Ok(());
-    }
-
-    // Remove mods whose archive_path matches any blacklisted path
-    installed_mods.retain(|mod_info| !blacklist.contains(&mod_info.file_path));
-
-    Ok(())
+    local_mods: &mut Vec<LocalMod>,
+    blacklisted_paths: &HashSet<PathBuf>,
+) {
+    local_mods.retain(|local_mod| !blacklisted_paths.contains(&local_mod.file_path))
 }
 
 #[cfg(test)]
@@ -253,13 +245,27 @@ mod tests_for_files {
         let mods_dir = temp_dir.path();
 
         let manifest = generate_test_mod_manifest("BlacklistedMod", "1.0.0");
-        let archive_path = create_test_mod_archive(mods_dir, &manifest, MANIFEST_FILE_NAME);
+        let file_path = create_test_mod_archive(mods_dir, &manifest, MANIFEST_FILE_NAME);
 
-        let mut installed_mods = vec![LocalMod::new(archive_path.to_path_buf(), manifest)];
-        let blacklist: HashSet<PathBuf> = vec![archive_path].into_iter().collect();
+        let mut local_mods = vec![LocalMod::new(file_path.to_path_buf(), manifest)];
+        let blacklisted_paths: HashSet<PathBuf> = vec![file_path].into_iter().collect();
 
-        let result = remove_blacklisted_mods(&mut installed_mods, &blacklist);
-        assert!(result.is_ok());
-        assert!(installed_mods.is_empty());
+        remove_blacklisted_mods(&mut local_mods, &blacklisted_paths);
+        assert!(local_mods.is_empty());
+    }
+
+    #[test]
+    fn test_remove_blacklisted_mods_without_entries() {
+        let temp_dir = tempdir().unwrap();
+        let mods_dir = temp_dir.path();
+
+        let manifest = generate_test_mod_manifest("BlacklistedMod", "1.0.0");
+        let file_path = create_test_mod_archive(mods_dir, &manifest, MANIFEST_FILE_NAME);
+
+        let mut local_mods = vec![LocalMod::new(file_path.to_path_buf(), manifest)];
+        let empty_blacklisted_paths = HashSet::new();
+
+        remove_blacklisted_mods(&mut local_mods, &empty_blacklisted_paths);
+        assert_eq!(local_mods.len(), 1);
     }
 }
