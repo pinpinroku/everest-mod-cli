@@ -1,7 +1,7 @@
 use clap::Parser;
 use indicatif::ProgressBar;
 use reqwest::Client;
-use std::{collections::HashSet, time::Duration};
+use std::time::Duration;
 
 mod cli;
 mod constant;
@@ -74,7 +74,7 @@ async fn run() -> Result<(), Error> {
                 return Ok(());
             }
 
-            let local_mods = local::load_local_mods(archive_paths)?;
+            let local_mods = local::load_local_mods(&archive_paths)?;
 
             local_mods.iter().for_each(|local_mod| {
                 if let Some(name) = local_mod.file_path.file_name() {
@@ -91,7 +91,7 @@ async fn run() -> Result<(), Error> {
         Commands::Show(args) => {
             tracing::info!("Checking installed mod information...");
 
-            let local_mods = local::load_local_mods(archive_paths)?;
+            let local_mods = local::load_local_mods(&archive_paths)?;
 
             if let Some(local_mod) = local_mods.iter().find(|m| m.manifest.name == args.name) {
                 println!(
@@ -123,30 +123,28 @@ async fn run() -> Result<(), Error> {
         Commands::Install(args) => {
             let mod_id = install::parse_mod_page_url(&args.mod_page_url)?;
 
-            // Fetches mod information from URL
+            tracing::info!("Look up the mod entry matches the given URL by using its ID");
             let mod_registry = mod_registry::fetch_remote_mod_registry().await?;
-            let mod_info = mod_registry.find_mod_registry_by_id(mod_id);
+            let mod_entry = mod_registry.find_mod_entry_by_id(mod_id);
 
-            // If the mod is found in the database, check if it is installed or not, if not, install it.
-            match mod_info {
-                Some((mod_name, manifest)) => {
-                    tracing::debug!("Matched entry name: {}", mod_name);
-                    tracing::debug!("Matched entry detail: {:#?}", manifest);
+            let (mod_name, remote_mod) = match mod_entry {
+                Some(entry) => entry,
+                None => {
+                    println!("Could not find a mod matching [{}].", &args.mod_page_url);
+                    return Ok(());
+                }
+            };
 
-                    // Check if already installed
-                    let local_mods = local::load_local_mods(archive_paths)?;
+            tracing::debug!("Matched entry name: {}", mod_name);
+            tracing::debug!("Matched entry detail: {:#?}", remote_mod);
 
-                    // Create a vector of mod names.
-                    let installed_mod_names: HashSet<_> = local_mods
-                        .into_iter()
-                        .map(|installed| installed.manifest.name)
-                        .collect();
-
-                    // Check if the target mod_name is in the vector.
-                    if installed_mod_names.contains(mod_name) {
-                        println!("You already have [{}] installed.", mod_name);
-                        return Ok(());
-                    }
+            tracing::info!("Check if the mod is already installed or not");
+            let local_mods = local::load_local_mods(&archive_paths)?;
+            let installed_mod_names = local::collect_installed_mod_names(local_mods)?;
+            if installed_mod_names.contains(mod_name) {
+                println!("You already have [{}] installed.", mod_name);
+                return Ok(());
+            }
 
             tracing::info!("Start installing the new mod");
             let client = Client::builder()
@@ -166,7 +164,7 @@ async fn run() -> Result<(), Error> {
 
         Commands::Update(args) => {
             // Filter installed mods according to the `updaterblacklist.txt`
-            let mut local_mods = local::load_local_mods(archive_paths)?;
+            let mut local_mods = local::load_local_mods(&archive_paths)?;
             let blacklist = fileutil::read_updater_blacklist(&mods_directory)?;
             local::remove_blacklisted_mods(&mut local_mods, &blacklist);
 

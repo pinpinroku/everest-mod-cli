@@ -109,21 +109,21 @@ impl Generatable for LocalMod {
 /// Load local mods with valid manifest files.
 ///
 /// # Arguments
-/// * `archive_paths` - A list of all local mod paths.
+/// * `archive_paths` - A reference to the list of all local mod paths.
 ///
 /// # Returns
 /// * `Ok(Vec<LocalMod>)` - List of local mods with valid manifests.
 /// * `Err(Error)` - If there are issues reading the files or parsing the manifests.
-pub fn load_local_mods(archive_paths: Vec<PathBuf>) -> Result<Vec<LocalMod>, Error> {
+pub fn load_local_mods(archive_paths: &[PathBuf]) -> Result<Vec<LocalMod>, Error> {
     debug!("Start parsing archive files.");
     let start = Instant::now();
 
     let mut local_mods = Vec::with_capacity(archive_paths.len());
 
     for archive_path in archive_paths {
-        let buffer = read_manifest_file_from_archive(&archive_path)?;
+        let buffer = read_manifest_file_from_archive(archive_path)?;
         let manifest = ModManifest::from_yaml(&buffer)?;
-        let local_mod = LocalMod::new(archive_path, manifest);
+        let local_mod = LocalMod::new(archive_path.to_path_buf(), manifest);
         local_mods.push(local_mod);
     }
     let duration = start.elapsed();
@@ -147,6 +147,16 @@ pub fn remove_blacklisted_mods(
     blacklisted_paths: &HashSet<PathBuf>,
 ) {
     local_mods.retain(|local_mod| !blacklisted_paths.contains(&local_mod.file_path))
+}
+
+/// Collects and returns mod names which are already installed locally.
+pub fn collect_installed_mod_names(local_mods: Vec<LocalMod>) -> Result<HashSet<String>, Error> {
+    let installed_mod_names: HashSet<_> = local_mods
+        .into_iter()
+        .map(|installed| installed.manifest.name)
+        .collect();
+    tracing::debug!("Installed mod names: {:?}", installed_mod_names);
+    Ok(installed_mod_names)
 }
 
 #[cfg(test)]
@@ -221,7 +231,7 @@ mod tests_for_files {
 
         let archive_paths = vec![path];
 
-        let result = load_local_mods(archive_paths);
+        let result = load_local_mods(&archive_paths);
         assert!(result.is_ok());
 
         let local_mods = result.unwrap();
@@ -238,7 +248,7 @@ mod tests_for_files {
 
         let archive_paths = vec![path];
 
-        let result = load_local_mods(archive_paths);
+        let result = load_local_mods(&archive_paths);
         assert!(result.is_err());
     }
 
@@ -270,5 +280,22 @@ mod tests_for_files {
 
         remove_blacklisted_mods(&mut local_mods, &empty_blacklisted_paths);
         assert_eq!(local_mods.len(), 1);
+    }
+
+    #[test]
+    fn test_collect_installed_mod_names() {
+        let temp_dir = tempdir().unwrap();
+        let mods_dir = temp_dir.path();
+
+        let manifest = generate_test_mod_manifest("Testmod", "1.0.0");
+        let file_path = create_test_mod_archive(mods_dir, &manifest, MANIFEST_FILE_NAME);
+
+        let test_local_mods = vec![LocalMod::new(file_path.to_path_buf(), manifest.clone())];
+        let result = collect_installed_mod_names(test_local_mods.clone());
+        assert!(result.is_ok());
+
+        let result = result.unwrap().clone();
+        assert_eq!(result.len(), test_local_mods.len());
+        assert!(result.contains(&manifest.name));
     }
 }
