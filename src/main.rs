@@ -151,7 +151,6 @@ async fn run() -> Result<(), Error> {
                     // Install the new mod
                     let client = Client::builder().timeout(Duration::from_secs(30)).build()?;
                     let pb = ProgressBar::new(manifest.file_size);
-                    let mod_registry = mod_registry.clone();
                     install::install(
                         &client,
                         (mod_name, manifest),
