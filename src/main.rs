@@ -148,23 +148,20 @@ async fn run() -> Result<(), Error> {
                         return Ok(());
                     }
 
-                    // Install the new mod
-                    let client = Client::builder().timeout(Duration::from_secs(30)).build()?;
-                    let pb = ProgressBar::new(manifest.file_size);
-                    install::install(
-                        &client,
-                        (mod_name, manifest),
-                        &mod_registry,
-                        &mods_directory,
-                        installed_mod_names,
-                        &pb,
-                    )
-                    .await?;
-                }
-                None => {
-                    println!("Could not find a mod matching [{}].", &args.mod_page_url);
-                }
-            }
+            tracing::info!("Start installing the new mod");
+            let client = Client::builder()
+                .connect_timeout(Duration::from_secs(30))
+                .build()?;
+            let pb = ProgressBar::new(remote_mod.file_size);
+            install::install(
+                &client,
+                (mod_name, remote_mod),
+                &mod_registry,
+                &mods_directory,
+                installed_mod_names,
+                &pb,
+            )
+            .await?;
         }
 
         Commands::Update(args) => {
@@ -181,7 +178,9 @@ async fn run() -> Result<(), Error> {
                 println!("All mods are up to date!");
             } else if args.install {
                 println!("\nInstalling updates...");
-                let client = Client::builder().timeout(Duration::from_secs(30)).build()?;
+                let client = Client::builder()
+                    .connect_timeout(Duration::from_secs(30))
+                    .build()?;
                 update::update_multiple_mods(&client, &mods_directory, available_updates).await?;
             } else {
                 println!("\nRun with --install to install these updates");
