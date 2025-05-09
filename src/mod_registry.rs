@@ -38,7 +38,7 @@ pub type RemoteModRegistry = HashMap<String, RemoteModInfo>;
 
 pub trait ModRegistryQuery {
     fn get_mod_info_by_name(&self, name: &str) -> Option<&RemoteModInfo>;
-    fn find_mod_registry_by_id(&self, mod_id: u32) -> Option<(&String, &RemoteModInfo)>;
+    fn find_mod_entry_by_id(&self, mod_id: u32) -> Option<(&String, &RemoteModInfo)>;
 }
 
 impl ModRegistryQuery for RemoteModRegistry {
@@ -49,7 +49,7 @@ impl ModRegistryQuery for RemoteModRegistry {
     }
 
     /// Finds a mod registry that matches the mod ID.
-    fn find_mod_registry_by_id(&self, mod_id: u32) -> Option<(&String, &RemoteModInfo)> {
+    fn find_mod_entry_by_id(&self, mod_id: u32) -> Option<(&String, &RemoteModInfo)> {
         debug!(
             "Looking up the remote mod information that matches the mod ID: {}",
             mod_id
@@ -136,13 +136,13 @@ mod tests {
     fn test_find_mod_registry_by_id() {
         let mod_registry = dummy_registry();
 
-        let result = mod_registry.find_mod_registry_by_id(42);
+        let result = mod_registry.find_mod_entry_by_id(42);
         assert!(result.is_some());
         let (found_key, found_mod) = result.unwrap();
         assert_eq!(found_mod.gamebanana_id, 42);
         assert_eq!(found_key, "SpeedrunTool");
 
-        assert!(mod_registry.find_mod_registry_by_id(12345).is_none());
+        assert!(mod_registry.find_mod_entry_by_id(12345).is_none());
     }
 
     #[test]
