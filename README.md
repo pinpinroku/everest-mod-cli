@@ -31,7 +31,7 @@ This project currently targets **Linux** installation. **macOS** might work, but
 - **Comprehensive Mod Listing**: View all installed mods along with their names and versions at a glance.
 - **Installed Mod Details**: Easily check the dependencies of your installed mods for better management.
 - **Automatic Update Checks**: Stay up-to-date with available updates for your installed mods, which can be installed automatically while you play—running in the background!
-- **Install Mods by Name**: No need for Olympus or a web browser—just type the mod name to install.
+- **Install Mods by URL**: Just type the URL of the mod page to install the mod. All missing dependencies are resolved automatically.
 - **Asynchronous Downloads**: Experience reduced total download times, lower memory usage, and faster checksum verifications for a smoother experience. 
 
 ---
