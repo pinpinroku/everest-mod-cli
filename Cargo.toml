@@ -1,6 +1,6 @@
 [package]
 name = "everest-mod-cli"
-version = "1.2.0"
+version = "2.0.0"
 edition = "2024"
 description = "A simple cli tool to manage mods for Celeste."
 authors = ["pinpinroku <pinpinroku11600@tutanota.com>"]
@@ -12,19 +12,16 @@ repository = "https://github.com/pinpinroku/everest-mod-cli"
 clap = { version = "4.5.23", features = ["derive"] }
 futures-util = "0.3.31"
 indicatif = "0.17.9"
-reqwest = { version = "0.12.12", features = ["stream"] }
+reqwest = { version = "0.12.12", features = ["gzip" ,"stream"] }
 serde = { version = "1.0.217", features = ["derive"] }
 tokio = { version = "1.42.0", features = ["full"] }
 zip = "2.2.2"
 xxhash-rust = { version = "0.8.15", features = ["xxh64"] }
 serde_yaml_ng = "0.10.0"
-bytes = "1.10.1"
 thiserror = "2.0.12"
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 uuid = { version = "1.16.0", features = ["v4"] }
-
-[dev-dependencies]
 tempfile = "3.15.0"
 
 [profile.release]

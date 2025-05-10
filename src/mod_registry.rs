@@ -1,33 +1,25 @@
+use indicatif::ProgressBar;
+use serde::Deserialize;
 use std::collections::HashMap;
+use tracing::debug;
 
-use bytes::Bytes;
-use serde::{Deserialize, Serialize};
-use tracing::info;
+use crate::{constant::MOD_REGISTRY_URL, error::Error};
 
 /// Each entry in `everest_update.yaml` containing information about a mod.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct RemoteModInfo {
-    /// Actual mod name (not filename)
-    #[serde(skip)]
-    pub name: String,
     /// Version string
     #[serde(rename = "Version")]
     pub version: String,
-    /// File size in bytes
-    #[serde(rename = "Size")]
-    pub file_size: u64,
-    /// Timestamp of the last update
-    #[serde(rename = "LastUpdate")]
-    pub updated_at: u64,
     /// Download link for the mod file
     #[serde(rename = "URL")]
     pub download_url: String,
+    /// File size
+    #[serde(rename = "Size")]
+    pub file_size: u64,
     /// xxHash checksums for the file
     #[serde(rename = "xxHash")]
     pub checksums: Vec<String>,
-    /// Category for the mod (e.g., GameBanana type)
-    #[serde(rename = "GameBananaType")]
-    pub gamebanana_type: String,
     /// Reference ID of the GameBanana page
     #[serde(rename = "GameBananaId")]
     pub gamebanana_id: u32,
@@ -35,160 +27,165 @@ pub struct RemoteModInfo {
 
 impl RemoteModInfo {
     /// Checks if the provided hash matches any of the expected checksums.
-    ///
-    /// # Arguments
-    /// * `computed_hash` - The hash to check against the mod's checksums.
-    ///
-    /// # Returns
-    /// Returns `true` if the hash matches any of the checksums, otherwise `false`.
     pub fn has_matching_hash(&self, computed_hash: &str) -> bool {
         self.checksums
             .iter()
-            .any(|checksum| checksum == computed_hash)
+            .any(|checksum| checksum.eq_ignore_ascii_case(computed_hash))
     }
 }
 
 /// Represents the complete `everest_update.yaml` containing all available remote mods.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ModRegistry {
-    /// A mapping of mod names to their metadata
-    #[serde(flatten)]
-    pub entries: HashMap<String, RemoteModInfo>,
+pub type RemoteModRegistry = HashMap<String, RemoteModInfo>;
+
+pub trait ModRegistryQuery {
+    fn get_mod_info_by_name(&self, name: &str) -> Option<&RemoteModInfo>;
+    fn find_mod_entry_by_id(&self, mod_id: u32) -> Option<(&String, &RemoteModInfo)>;
 }
 
-impl ModRegistry {
-    /// Initializes a `ModRegistry` instance from raw binary data.
-    ///
-    /// # Arguments
-    /// * `data` - Raw binary data representing the mod registry.
-    ///
-    /// # Returns
-    /// * `Ok(Self)` - Parsed mod registry.
-    /// * `Err(serde_yaml_ng::Error)` - If parsing fails.
-    pub async fn from(data: Bytes) -> Result<Self, serde_yaml_ng::Error> {
-        info!("Parsing remote mod registry data");
-        let mut mod_registry: Self = serde_yaml_ng::from_slice(&data)?;
-
-        // Set the name field for each ModInfo.
-        mod_registry
-            .entries
-            .iter_mut()
-            .for_each(|(key, mod_info)| mod_info.name = key.clone());
-
-        Ok(mod_registry)
+impl ModRegistryQuery for RemoteModRegistry {
+    /// Gets a mod registry entry that matches the given name.
+    fn get_mod_info_by_name(&self, name: &str) -> Option<&RemoteModInfo> {
+        debug!("Getting the mod information matching the name: {}", name);
+        self.get(name)
     }
 
-    /// Retrieves mod information by name.
-    ///
-    /// # Arguments
-    /// * `name` - The name of the mod to retrieve.
-    ///
-    /// # Returns
-    /// * `Some(&RemoteModInfo)` - If the mod is found.
-    /// * `None` - If the mod is not found.
-    pub fn get_mod_info_by_name(&self, name: &str) -> Option<&RemoteModInfo> {
-        info!("Getting remote mod information for the mod: {}", name);
-        self.entries.get(name)
+    /// Finds a mod registry that matches the mod ID.
+    fn find_mod_entry_by_id(&self, mod_id: u32) -> Option<(&String, &RemoteModInfo)> {
+        debug!(
+            "Looking up the remote mod information that matches the mod ID: {}",
+            mod_id
+        );
+        self.iter()
+            .find(|(_, manifest)| manifest.gamebanana_id == mod_id)
     }
+}
 
-    /// Retrieves mod information by game page URL.
-    ///
-    /// # Arguments
-    /// * `url` - The URL of the mod to retrieve.
-    ///
-    /// # Returns
-    /// * `Some(&RemoteModInfo)` - If the mod is found.
-    /// * `None` - If the mod is not found.
-    pub fn get_mod_info_from_url(&self, url: &str) -> Option<&RemoteModInfo> {
-        info!("Getting remote mod information for the URL: {}", url);
-        let id = url
-            .split("/")
-            .last()
-            .and_then(|id_str| id_str.parse::<u32>().ok());
-        if let Some(id) = id {
-            self.entries
-                .values()
-                .find(|manifest| manifest.gamebanana_id == id)
-        } else {
-            None
-        }
-    }
+/// Fetches the remote mod registry, then parse and deserialize into the RemoteModRegistry type
+pub async fn fetch_remote_mod_registry() -> Result<RemoteModRegistry, Error> {
+    let spinner = create_spinner();
+
+    let client = reqwest::ClientBuilder::new()
+        .http2_prior_knowledge()
+        .gzip(true)
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+
+    let response = client
+        .get(MOD_REGISTRY_URL)
+        .send()
+        .await?
+        .error_for_status()?;
+
+    tracing::debug!("Response headers: {:#?}", response.headers());
+    let bytes = response.bytes().await?;
+
+    spinner.finish_and_clear();
+
+    tracing::info!("Parsing the binary data from the response");
+    let mod_registry = parse_response_bytes(&bytes)?;
+
+    Ok(mod_registry)
+}
+
+/// Parses a binary data from the response into the remote mod registry.
+fn parse_response_bytes(
+    bytes: &[u8],
+) -> Result<HashMap<String, RemoteModInfo>, serde_yaml_ng::Error> {
+    serde_yaml_ng::from_slice::<RemoteModRegistry>(bytes)
+}
+
+/// Create a spinner
+fn create_spinner() -> ProgressBar {
+    use indicatif::ProgressStyle;
+    use std::time::Duration;
+
+    let spinner = ProgressBar::new_spinner();
+    spinner.enable_steady_tick(Duration::from_millis(100));
+    spinner.set_style(
+        ProgressStyle::with_template("{spinner:.green/blue} {msg}")
+            .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+    );
+    spinner.set_message("Fetching online database...");
+    spinner
 }
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use std::collections::HashMap;
 
-    /// Generates a `RemoteModInfo` instance with default or specified values.
-    pub fn generate_remote_mod_info(
-        name: &str,
-        version: &str,
-        checksums: Vec<String>,
-    ) -> RemoteModInfo {
+    fn dummy_mod_info(gamebanana_id: u32, checksums: Vec<&str>) -> RemoteModInfo {
         RemoteModInfo {
-            name: name.to_string(),
-            version: version.to_string(),
-            file_size: 1024,
-            updated_at: 1234567890,
-            download_url: "https://gamebanana.com/mmdl/567812".to_string(),
-            checksums,
-            gamebanana_type: "Tool".to_string(),
-            gamebanana_id: 123456,
+            gamebanana_id,
+            checksums: checksums.into_iter().map(|s| s.to_string()).collect(),
+            ..Default::default()
         }
     }
 
-    /// Generates a `ModRegistry` instance with default or specified mod entries.
-    pub fn generate_mod_registry(entries: Vec<(&str, RemoteModInfo)>) -> ModRegistry {
-        let mut registry_entries = HashMap::new();
-        for (name, mod_info) in entries {
-            registry_entries.insert(name.to_string(), mod_info);
-        }
-        ModRegistry {
-            entries: registry_entries,
-        }
+    fn dummy_registry() -> HashMap<String, RemoteModInfo> {
+        let mut registry = HashMap::new();
+        registry.insert(
+            "SpeedrunTool".to_string(),
+            dummy_mod_info(42, vec!["abcd1234", "efgh5678"]),
+        );
+        registry.insert("TASRecorder".to_string(), dummy_mod_info(99, vec![]));
+        registry
     }
 
     #[test]
-    fn test_remote_mod_info_has_matching_hash() {
-        let mod_info = generate_remote_mod_info(
-            "Test Mod",
-            "1.0.0",
-            vec![String::from("abcd1234"), String::from("efgh5678")],
-        );
-
+    fn test_has_matching_hash() {
+        let mod_info = dummy_mod_info(0, vec!["abcd1234", "efgh5678"]);
         assert!(mod_info.has_matching_hash("abcd1234"));
-        assert!(!mod_info.has_matching_hash("xyz9876"));
+        assert!(mod_info.has_matching_hash("efgh5678"));
+        assert!(!mod_info.has_matching_hash("notfound"));
     }
 
     #[test]
-    fn test_mod_registry_get_mod_info_by_name() {
-        let mod1 = generate_remote_mod_info("Mod1", "1.0.0", vec![String::from("hash1")]);
-        let mod2 = generate_remote_mod_info("Mod2", "2.0.0", vec![String::from("hash2")]);
-        let registry = generate_mod_registry(vec![("Mod1", mod1.clone()), ("Mod2", mod2.clone())]);
+    fn test_get_mod_info_by_name() {
+        let mod_registry = dummy_registry();
 
-        let mod_info = registry.get_mod_info_by_name("Mod1");
-        assert!(mod_info.is_some());
-        assert_eq!(mod_info.unwrap().version, "1.0.0");
-
-        let nonexistent_mod = registry.get_mod_info_by_name("Nonexistent");
-        assert!(nonexistent_mod.is_none());
-    }
-
-    #[test]
-    fn test_mod_registry_get_mod_info_from_url() {
-        let mod1 = generate_remote_mod_info("Mod1", "1.0.0", vec![String::from("hash1")]);
-        let registry = generate_mod_registry(vec![("Mod1", mod1.clone())]);
-
-        let mod_info = registry.get_mod_info_from_url("https://gamebanan.com/mods/123456");
-        assert!(mod_info.is_some());
-        assert_eq!(mod_info.unwrap().gamebanana_id, 123456);
-        assert_eq!(
-            mod_info.unwrap().download_url,
-            "https://gamebanana.com/mmdl/567812"
+        assert!(mod_registry.get_mod_info_by_name("SpeedrunTool").is_some());
+        assert!(
+            mod_registry
+                .get_mod_info_by_name("NonExistentMod")
+                .is_none()
         );
+    }
 
-        let not_url = registry.get_mod_info_from_url("Mod 1");
-        assert!(not_url.is_none());
+    #[test]
+    fn test_find_mod_registry_by_id() {
+        let mod_registry = dummy_registry();
+
+        let result = mod_registry.find_mod_entry_by_id(42);
+        assert!(result.is_some());
+        let (found_key, found_mod) = result.unwrap();
+        assert_eq!(found_mod.gamebanana_id, 42);
+        assert_eq!(found_key, "SpeedrunTool");
+
+        assert!(mod_registry.find_mod_entry_by_id(12345).is_none());
+    }
+
+    #[test]
+    fn test_parse_response_bytes_valid() {
+        // Real example of SpeedrunTool
+        let yaml = r#"
+SpeedrunTool:
+  GameBananaType: Tool
+  Version: 3.24.3
+  LastUpdate: 1739450250
+  Size: 251301
+  GameBananaId: 6597
+  GameBananaFieldId: 1380853
+  xxHash:
+  - cbc55c04533efb34
+  URL: "https://gamebanana.com/mmdl/1380853"
+"#;
+
+        let bytes = yaml.as_bytes();
+        let result = parse_response_bytes(bytes);
+        assert!(result.is_ok());
+        let registry = result.unwrap();
+        assert!(registry.contains_key("SpeedrunTool"));
     }
 }

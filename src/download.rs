@@ -1,173 +1,202 @@
-use bytes::Bytes;
 use futures_util::StreamExt;
-use indicatif::{ProgressBar, ProgressStyle};
-use reqwest::Client;
+use indicatif::ProgressBar;
+use reqwest::{Client, Response};
 use std::path::{Path, PathBuf};
-use tokio::{fs, io::AsyncWriteExt};
-use tracing::{error, info};
+use tempfile::NamedTempFile;
+use tokio::io::AsyncWriteExt;
+use tracing::{debug, error};
 use xxhash_rust::xxh64::Xxh64;
 
-use crate::{constant::MOD_REGISTRY_URL, error::Error};
+use crate::{error::Error, fileutil::replace_home_dir_with_tilde};
 
-/// Manages mod downloads and registry fetching.
-#[derive(Debug, Clone)]
-pub struct ModDownloader {
-    client: Client,
-    registry_url: String,
-    download_dir: PathBuf,
-}
+pub mod install;
+pub mod update;
 
-impl ModDownloader {
-    /// Creates a new `ModDownloader` with the specified download directory.
-    ///
-    /// # Parameters
-    /// - `download_dir`: The directory where downloaded mods will be stored.
-    ///
-    /// # Returns
-    /// A new instance of `ModDownloader`.
-    pub fn new(download_dir: &Path) -> Self {
-        Self {
-            client: Client::new(),
-            registry_url: String::from(MOD_REGISTRY_URL),
-            download_dir: download_dir.to_path_buf(),
-        }
-    }
-
-    /// Fetches the remote mod registry.
-    ///
-    /// # Returns
-    /// - `Ok(Bytes)`: The raw bytes of the registry file upon success.
-    /// - `Err(Error)`: An error if the request or parsing fails.
-    pub async fn fetch_mod_registry(&self) -> Result<Bytes, Error> {
-        println!("Fetching online database...");
-        let response = self.client.get(&self.registry_url).send().await?;
-        let yaml_data = response.bytes().await?;
-        Ok(yaml_data)
-    }
-
-    /// Downloads a mod file, saves it locally, and verifies its integrity.
-    ///
-    /// # Parameters
-    /// - `url`: The URL to download the mod from.
-    /// - `name`: The mod's name (used for logging).
-    /// - `expected_hash`: Slice of acceptable xxHash checksum strings (in hexadecimal).
-    ///
-    /// # Returns
-    /// - `Ok(())` if the download and checksum verification succeed.
-    /// - `Err(Error)` if an error occurs during download or checksum verification.
-    pub async fn download_mod(
-        &self,
-        url: &str,
-        name: &str,
-        expected_hash: &[String],
-    ) -> Result<(), Error> {
-        // TODO: Handling errors like 404 or 500+
-        let response = self.client.get(url).send().await?.error_for_status()?;
-        info!("[{}] Status code: {:#?}", name, response.status());
-
-        let filename = util::determine_filename(response.url(), response.headers());
-        let download_path = self.download_dir.join(filename);
-        info!("[{}] Destination: {:#?}", name, download_path);
-
-        let total_size = response.content_length().unwrap_or(0);
-        info!("[{}] Total file size: {}", name, total_size);
-
-        let pb = set_progress_bar_style(name, total_size);
-
-        let computed_hash = download_and_write(response, &download_path, pb).await?;
-
-        info!("\n[{}] 🔍 Verifying checksum...", name);
-        verify_checksum(computed_hash, expected_hash, &download_path).await?;
-
-        Ok(())
-    }
-}
-
-/// Set up progress bar style using template.
-fn set_progress_bar_style(name: &str, total_size: u64) -> ProgressBar {
-    let pb = ProgressBar::new(total_size);
-    pb.set_style(
-        ProgressStyle::with_template(
-            "{msg:<} {total_bytes:>40.1.cyan/blue} {bytes_per_sec:.2} {eta_precise:} {bar:60} {percent:}%",
-        )
-        .expect("Invalid progress bar style. Should be configured properly.")
+/// Retrieves the file size of the file from the response header by sending a HEAD request to the target URL.
+async fn get_file_size(client: &Client, url: &str) -> Result<u64, Error> {
+    debug!(
+        "Get the file size by sending HEAD request to the server: {}",
+        url
     );
 
-    // If the name is too long, truncate it and add an ellipsis at the end.
-    let mut name = name.to_string();
-    let max_size = 40;
-    if !name.len() <= max_size {
-        name = format!("{}...", &name[..max_size - 3])
-    }
+    let response = client.head(url).send().await?.error_for_status()?;
+    debug!("Status code: {:#?}", response.status());
 
-    pb.set_message(name);
-    pb
+    let total_size = response
+        .headers()
+        .get(reqwest::header::CONTENT_LENGTH)
+        .and_then(|length_header| length_header.to_str().ok())
+        .and_then(|length_str| length_str.parse::<u64>().ok())
+        .unwrap_or(0);
+    debug!("Total size: {}", total_size);
+
+    Ok(total_size)
 }
 
-/// Downloads the mod and writes it to a file, updating the progress bar. Returns computed_hash.
+/// Downloads a mod file, returns the file path.
+pub async fn download_mod(
+    client: &Client,
+    mod_name: &str,
+    url: &str,
+    expected_hashes: &[String],
+    download_dir: &Path,
+    pb: &ProgressBar,
+) -> Result<PathBuf, Error> {
+    debug!("URL: {}", url);
+    debug!(
+        "Destination directory: {}",
+        replace_home_dir_with_tilde(download_dir)
+    );
+
+    let response = client.get(url).send().await?.error_for_status()?;
+    debug!("Response status: {}", response.status());
+
+    let filename = download_util::determine_filename(response.url(), response.headers());
+    let download_path = download_dir.join(&filename);
+
+    debug!("Full path: {}", replace_home_dir_with_tilde(&download_path));
+
+    download_and_write(response, &download_path, expected_hashes, pb).await?;
+
+    pb.finish_with_message(format!("🍓 {} [{}]", mod_name, filename));
+    Ok(download_path)
+}
+
+// Writes all bytes to the temporary file, verifies the checksum when the write is complete, and then moves them to the destination.
 async fn download_and_write(
-    response: reqwest::Response,
+    response: Response,
     download_path: &Path,
-    pb: ProgressBar,
-) -> Result<u64, Error> {
+    expected_hashes: &[String],
+    pb: &ProgressBar,
+) -> Result<(), Error> {
+    let temp_file = NamedTempFile::new()?;
+
     let mut stream = response.bytes_stream();
     let mut hasher = Xxh64::new(0);
-    let mut file = fs::File::create(download_path).await?;
-    let mut downloaded: u64 = 0;
+    let mut file = tokio::fs::File::create(&temp_file).await?;
 
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
         file.write_all(&chunk).await?;
         hasher.update(&chunk);
-        downloaded = downloaded.saturating_add(chunk.len() as u64);
-        pb.set_position(downloaded);
+        pb.inc(chunk.len() as u64);
     }
+    let computed_hash = hasher.digest();
 
-    pb.finish();
-
-    Ok(hasher.digest())
-}
-
-/// Verifies the checksum of the downloaded file.
-async fn verify_checksum(
-    computed_hash: u64,
-    expected_hash: &[String],
-    download_path: &Path,
-) -> Result<(), Error> {
     let hash_str = format!("{:016x}", computed_hash);
-    info!(
+    pb.set_message("🔍 Verifying checksum...");
+    debug!(
         "Xxhash in u64: {:#?}, formatted string: {:#?}",
         computed_hash, hash_str
     );
+    debug!(
+        "Checking computed hash: {} against expected: {:?}",
+        hash_str, expected_hashes
+    );
 
-    if expected_hash.contains(&hash_str) {
-        info!("✅ Checksum verified!");
+    if expected_hashes.contains(&hash_str) {
+        pb.set_message("✅ Checksum verified!");
+        debug!(
+            "Moving the file to the destination: {}",
+            replace_home_dir_with_tilde(download_path)
+        );
+        // NOTE: The permissions are set to 0600
+        tokio::fs::copy(temp_file, download_path).await?;
         Ok(())
     } else {
         error!("❌ Checksum verification failed!");
-        fs::remove_file(&download_path).await?;
-        info!("[Cleanup] Downloaded file removed 🗑️");
+        // NOTE: The temp file will be removed automatically
         Err(Error::InvalidChecksum {
             file: download_path.to_path_buf(),
             computed: hash_str,
-            expected: expected_hash.to_vec(),
+            expected: expected_hashes.to_vec(),
         })
     }
 }
 
+/// Style configurations of a progress bar.
+mod pb_style {
+    use indicatif::ProgressStyle;
+    use std::borrow::Cow;
+
+    const MAX_MSG_LENGTH: usize = 40;
+    const ELLIPSIS: &str = "...";
+
+    /// Builds a ProgressBar style, fallbacks to the default.
+    pub fn new() -> ProgressStyle {
+        ProgressStyle::with_template(
+        "{wide_msg} {total_bytes:>9.1.cyan/blue} {bytes_per_sec:>12.2} {eta_precise:>9} [{bar:>40}] {percent:>4}%",
+    )
+    .unwrap_or_else(|_| ProgressStyle::default_bar())
+    .progress_chars("#>-")
+    }
+
+    /// Truncates a given string and adds an ellipsis at the end if the length exceeds `MAX_MSG_LENGTH`.
+    pub fn truncate_msg(msg: &str) -> Cow<'_, str> {
+        if msg.len() > MAX_MSG_LENGTH {
+            Cow::Owned(format!(
+                "{}{}",
+                &msg[..MAX_MSG_LENGTH - ELLIPSIS.len()],
+                ELLIPSIS
+            ))
+        } else {
+            Cow::Borrowed(msg)
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_truncate_msg_no_truncation() {
+            let msg = "Short message";
+            // The message length is less than MAX_MSG_LENGTH.
+            let result = truncate_msg(msg);
+            assert_eq!(result, msg);
+        }
+
+        #[test]
+        fn test_truncate_msg_exact_length() {
+            let msg = "a".repeat(MAX_MSG_LENGTH);
+            // If the message length is exactly MAX_MSG_LENGTH,
+            // then it should not be truncated.
+            let result = truncate_msg(&msg);
+            assert_eq!(result, msg);
+        }
+
+        #[test]
+        fn test_truncate_msg_with_truncation() {
+            let original = "Long Name Helper by Helen, Helen's Helper, hELPER"; // 50 chars
+            let result = truncate_msg(original);
+            // Expected: first (MAX_MSG_LENGTH - ELLIPSIS.len()) characters plus ELLIPSIS.
+            let expected = format!(
+                "{}{}",
+                &original[..(MAX_MSG_LENGTH - ELLIPSIS.len())],
+                ELLIPSIS
+            );
+            assert_eq!(result, expected);
+        }
+
+        #[test]
+        fn test_truncate_msg_empty_string() {
+            let msg = "";
+            let result = truncate_msg(msg);
+            assert_eq!(result, msg);
+        }
+    }
+}
+
 /// Utility functions for determining filenames and handling mod download metadata.
-mod util {
+mod download_util {
     use reqwest::{Url, header::HeaderMap};
     use uuid::Uuid;
 
     /// Determines the most appropriate filename for a downloaded mod using the URL and headers.
     ///
-    /// # Parameters
+    /// # Arguments
     /// - `url`: The URL from which to extract the filename.
     /// - `headers`: The HTTP headers from which to extract the ETag.
-    ///
-    /// # Returns
-    /// - `String`: The determined filename.
     pub fn determine_filename(url: &Url, headers: &HeaderMap) -> String {
         extract_filename_from_url(url)
             .or_else(|| extract_filename_from_etag(headers))
@@ -186,7 +215,7 @@ mod util {
         headers
             .get(reqwest::header::ETAG)
             .and_then(|etag_value| etag_value.to_str().ok())
-            .map(|etag| etag.trim_matches('"').to_string())
+            .map(|etag| etag.trim_matches('"'))
             .map(|etag| format!("{}.zip", etag))
     }
 

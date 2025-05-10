@@ -10,6 +10,10 @@ pub struct Cli {
     #[arg(short = 'd', long = "mods-dir", value_name = "DIR")]
     pub mods_dir: Option<PathBuf>,
 
+    /// Verbose mode: Display verbose outputs
+    #[arg(short, long)]
+    pub verbose: bool,
+
     /// The subcommand to execute
     #[command(subcommand)]
     pub command: Commands,
@@ -18,7 +22,7 @@ pub struct Cli {
 /// The set of available subcommands for the Everest Mod CLI
 #[derive(Debug, Subcommand)]
 pub enum Commands {
-    /// Install a mod
+    /// Install a mod using the URL
     Install(InstallArgs),
     /// List installed mods
     List,
@@ -31,8 +35,8 @@ pub enum Commands {
 /// Arguments for the `install` subcommand
 #[derive(Debug, Args)]
 pub struct InstallArgs {
-    /// The name of the mod to install or a GameBanana URL
-    pub name_or_url: String,
+    /// The URL of the page where the mod is featured on the GameBanana
+    pub mod_page_url: String,
 }
 
 /// Arguments for the `show` subcommand
