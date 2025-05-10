@@ -125,7 +125,7 @@ mod pb_style {
     /// Builds a ProgressBar style, fallbacks to the default.
     pub fn new() -> ProgressStyle {
         ProgressStyle::with_template(
-        "{wide_msg} {total_bytes:>9.1.cyan/blue} {bytes_per_sec:>12.2} {eta_precise:>9} [{bar:>40}] {percent:>4}%",
+        "{wide_msg} {total_bytes:>10.1.cyan/blue} {bytes_per_sec:>11.2} {elapsed_precise:>8} [{bar:>40}] {percent:>3}%",
     )
     .unwrap_or_else(|_| ProgressStyle::default_bar())
     .progress_chars("#>-")

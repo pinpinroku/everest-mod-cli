@@ -102,7 +102,7 @@ fn create_spinner() -> ProgressBar {
     let spinner = ProgressBar::new_spinner();
     spinner.enable_steady_tick(Duration::from_millis(100));
     spinner.set_style(
-        ProgressStyle::with_template("{spinner:.green/blue} {msg}")
+        ProgressStyle::with_template("{spinner:.bold} {msg}")
             .unwrap_or_else(|_| ProgressStyle::default_spinner()),
     );
     spinner.set_message("Fetching online database...");
