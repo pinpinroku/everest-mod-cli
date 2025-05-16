@@ -77,10 +77,12 @@ async fn run() -> Result<(), Error> {
             let local_mods = local::load_local_mods(&archive_paths)?;
 
             local_mods.iter().for_each(|local_mod| {
-                if let Some(name) = local_mod.file_path.file_name() {
-                    println!("- {} ({})", local_mod.manifest.name, name.to_string_lossy());
-                } else {
-                    println!("- {}", local_mod.manifest.name);
+                if let Some(os_str) = local_mod.file_path.file_name() {
+                    println!(
+                        "- {} ({})",
+                        local_mod.manifest.name,
+                        os_str.to_string_lossy()
+                    );
                 }
             });
 
