@@ -164,13 +164,14 @@ pub async fn hash_file(file_path: &Path) -> Result<String, Error> {
     Ok(hash_str)
 }
 
-/// Reads the updater blacklist file from the specified mods directory and returns a set of file paths.
+/// Reads the `updaterblacklist.txt` and returns a set of file paths if any, `None` otherwise.
 ///
 /// # Arguments
-/// * `mods_directory` - A reference to the `Path` where the updater blacklist file is stored.
+/// * `mods_directory` - A reference to the `Path` where the `updaterblacklist.txt` is stored.
 ///
 /// # Returns
-/// * `Ok(HashSet<PathBuf>)` - A HashSet containing the archive file paths if the file was read successfully.
+/// * `Ok(Some(HashSet<PathBuf>))` - A HashSet containing the archive file paths if the file was read successfully.
+/// * `Ok(None)` - Returns `None` if the file path does not exist.
 /// * `Err(io::Error)` - An error if there was an issue reading the file.
 pub fn read_updater_blacklist(mods_directory: &Path) -> Result<Option<HashSet<PathBuf>>, Error> {
     debug!("Checking the updater blacklist...");
@@ -180,18 +181,17 @@ pub fn read_updater_blacklist(mods_directory: &Path) -> Result<Option<HashSet<Pa
         return Ok(None);
     }
 
-    // If the blacklist file is missing, return empty HashSet
     let file = File::open(path)?;
     let reader = BufReader::new(file);
 
-    // Stores in the `HashSet` for `O(1)` lookups
+    // NOTE: Stores in the `HashSet` for `O(1)` lookups
     let filenames: HashSet<PathBuf> = reader
         .lines()
         .filter_map(|line_result| {
             line_result.ok().and_then(|line| {
                 let trimmed = line.trim();
                 if !trimmed.is_empty() && !trimmed.starts_with('#') {
-                    // NOTE: Generates the full paths by joining the filenames since it is easier to compare them as full paths.
+                    // NOTE: It is easier to compare them as full paths.
                     Some(mods_directory.join(trimmed))
                 } else {
                     None
