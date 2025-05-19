@@ -164,41 +164,47 @@ pub async fn hash_file(file_path: &Path) -> Result<String, Error> {
     Ok(hash_str)
 }
 
-/// Reads the `updaterblacklist.txt` and returns a set of file paths if any, `None` otherwise.
+/// Returns a set of file paths if any are found in the `updaterblacklist.txt`.
 ///
-/// # Arguments
-/// * `mods_directory` - A reference to the `Path` where the `updaterblacklist.txt` is stored.
+/// Returns `None` if the file is not found in the given mods directory.
 ///
-/// # Returns
-/// * `Ok(Some(HashSet<PathBuf>))` - A HashSet containing the archive file paths if the file was read successfully.
-/// * `Ok(None)` - Returns `None` if the file path does not exist.
-/// * `Err(io::Error)` - An error if there was an issue reading the file.
+/// # Errors
+/// Returns an error if the file cannot be opened.
 pub fn read_updater_blacklist(mods_directory: &Path) -> Result<Option<HashSet<PathBuf>>, Error> {
-    debug!("Checking the updater blacklist...");
+    tracing::info!("Checking for the blacklisted mods...");
     let path = mods_directory.join(UPDATER_BLACKLIST_FILE);
 
     if !path.exists() {
         return Ok(None);
     }
 
-    let file = File::open(path)?;
+    let file = File::open(&path)?;
     let reader = BufReader::new(file);
 
-    // NOTE: Stores in the `HashSet` for `O(1)` lookups
-    let filenames: HashSet<PathBuf> = reader
-        .lines()
-        .filter_map(|line_result| {
-            line_result.ok().and_then(|line| {
+    // NOTE: Stores the results in HashSet for O(1) lookups
+    let mut filenames: HashSet<PathBuf> = HashSet::new();
+    for (line_number, line_result) in reader.lines().enumerate() {
+        match line_result {
+            Ok(line) => {
                 let trimmed = line.trim();
-                if !trimmed.is_empty() && !trimmed.starts_with('#') {
-                    // NOTE: It is easier to compare them as full paths.
-                    Some(mods_directory.join(trimmed))
-                } else {
-                    None
+                if trimmed.is_empty() || trimmed.starts_with('#') {
+                    tracing::debug!("Skipping line {}: '{}'", line_number + 1, trimmed);
+                    continue;
                 }
-            })
-        })
-        .collect();
+                // NOTE: It is easier to compare them as full paths.
+                filenames.insert(mods_directory.join(trimmed));
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to read line {} in {}: {}",
+                    line_number + 1,
+                    path.display(),
+                    e
+                );
+                continue;
+            }
+        }
+    }
 
     tracing::debug!("Blacklist contains {} entries.", filenames.len());
 
