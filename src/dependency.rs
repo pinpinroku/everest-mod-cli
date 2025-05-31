@@ -7,14 +7,14 @@ use serde::{Deserialize, Serialize};
 use crate::{constant::MOD_DEPENDENCY_GRAPH, fetch, local::Dependency};
 
 /// Each entry of the `mod_dependency_graph.yaml`.
-#[derive(Debug, Deserialize, Serialize, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, Hash, PartialEq, Eq)]
 pub struct ModDependency {
     #[serde(rename = "OptionalDependencies")]
-    pub optional_dependencies: Vec<Dependency>,
+    optional_dependencies: Vec<Dependency>,
     #[serde(rename = "Dependencies")]
-    pub dependencies: Vec<Dependency>,
+    dependencies: Vec<Dependency>,
     #[serde(rename = "URL")]
-    pub url: String,
+    url: String,
 }
 
 /// Represents `mod_dependency_graph.yaml` which is the dependency graph.
@@ -62,5 +62,75 @@ impl ModDependencyQuery for DependencyGraph {
         }
 
         visited
+    }
+}
+
+#[cfg(test)]
+mod tests_dependency {
+    use super::*;
+    use crate::local::Dependency;
+
+    impl ModDependency {
+        pub fn new(dependencies: Vec<Dependency>) -> Self {
+            Self {
+                dependencies,
+                ..Default::default()
+            }
+        }
+    }
+
+    fn mock_dep(name: &str) -> Dependency {
+        Dependency {
+            name: name.to_string(),
+            ..Default::default()
+        }
+    }
+
+    fn sample_graph() -> DependencyGraph {
+        let mut graph = DependencyGraph::new();
+
+        // A depends on B and C
+        graph.insert(
+            "A".to_string(),
+            ModDependency::new(vec![mock_dep("B"), mock_dep("C")]),
+        );
+        // B depends on D
+        graph.insert("B".to_string(), ModDependency::new(vec![mock_dep("D")]));
+        // C has no dependencies
+        graph.insert("C".to_string(), ModDependency::new(vec![]));
+        // D has no dependencies
+        graph.insert("D".to_string(), ModDependency::new(vec![]));
+
+        graph
+    }
+
+    #[test]
+    fn test_collect_all_dependencies_bfs() {
+        let graph = sample_graph();
+        let deps = graph.collect_all_dependencies_bfs("A");
+        let expected: std::collections::HashSet<_> =
+            ["A", "B", "C", "D"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(deps, expected);
+    }
+
+    #[test]
+    fn test_collect_all_dependencies_bfs_handles_cycles() {
+        let mut graph = sample_graph();
+        // Add a cycle: D depends on A
+        if let Some(d) = graph.get_mut("D") {
+            d.dependencies.push(mock_dep("A"));
+        }
+        let deps = graph.collect_all_dependencies_bfs("A");
+        let expected: std::collections::HashSet<_> =
+            ["A", "B", "C", "D"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(deps, expected); // Should not infinite loop
+    }
+
+    #[test]
+    fn test_get_mod_info_by_name() {
+        let graph = sample_graph();
+        let info = graph.get_mod_info_by_name("A");
+        assert!(info.is_some());
+        assert!(graph.get_mod_info_by_name("nonexistent").is_none());
     }
 }
