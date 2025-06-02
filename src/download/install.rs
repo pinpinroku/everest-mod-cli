@@ -1,6 +1,6 @@
 use std::{collections::HashSet, path::Path, time::Duration};
 
-use futures_util::{StreamExt, stream::FuturesUnordered};
+use futures_util::{StreamExt, stream};
 use indicatif::{MultiProgress, ProgressBar};
 use reqwest::{Client, Url};
 
@@ -97,13 +97,8 @@ pub async fn install_mod(
                     eprintln!("Error downloading {}: {}", name, e);
                 }
             }
-        })
-        .collect::<FuturesUnordered<_>>();
-
-    // NOTE: I don't know what the `fut: ()` can do within the async block.
-    tasks
-        .for_each_concurrent(Some(6), |fut| async move { fut })
-        .await;
+        });
+    stream::iter(tasks).for_each_concurrent(6, |fut| fut).await;
 
     Ok(())
 }
