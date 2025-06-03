@@ -94,11 +94,26 @@ pub async fn install_mod(
                 )
                 .await
                 {
-                    eprintln!("Error downloading {}: {}", name, e);
+                    Err((name.to_string(), e))
+                } else {
+                    Ok(())
                 }
             }
         });
-    stream::iter(tasks).for_each_concurrent(6, |fut| fut).await;
+
+    let results = stream::iter(tasks)
+        .buffer_unordered(6)
+        .collect::<Vec<_>>()
+        .await;
+    let errors: Vec<_> = results.into_iter().filter_map(|r| r.err()).collect();
+
+    if !errors.is_empty() {
+        eprintln!("\nSome mods failed to install:");
+        for (name, err) in errors {
+            eprintln!("- {}: {}", name, err);
+        }
+        anyhow::bail!("Some mods failed to download.");
+    }
 
     Ok(())
 }
