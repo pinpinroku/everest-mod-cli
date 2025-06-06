@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use std::{
     borrow::Cow,
     collections::HashSet,
@@ -22,7 +21,6 @@ use crate::error::Error;
 /// * `Err(Error)` - An error if the home directory could not be determined.
 pub fn get_mods_directory() -> Result<PathBuf, Error> {
     debug!("Detecting Celeste/Mods directory...");
-    // NOTE: `std::env::home_dir()` will be undeprecated in rust 1.87.0
     env::home_dir()
         .map(|home_path| home_path.join(STEAM_MODS_DIRECTORY_PATH))
         .ok_or(Error::CouldNotDetermineHomeDir)
