@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashSet, VecDeque},
-    path::{Path, PathBuf},
+    path::PathBuf,
     time::Instant,
 };
 use tokio::sync::OnceCell;
@@ -63,7 +63,6 @@ pub struct LocalMod {
 
 pub trait Generatable {
     fn new(file_path: PathBuf, manifest: ModManifest) -> Self;
-    fn file_path(&self) -> &Path;
     fn manifest(&self) -> &ModManifest;
     async fn checksum(&self) -> Result<&str, Error>;
 }
@@ -76,10 +75,6 @@ impl Generatable for LocalMod {
             manifest,
             checksum: OnceCell::new(),
         }
-    }
-
-    fn file_path(&self) -> &Path {
-        &self.file_path
     }
 
     fn manifest(&self) -> &ModManifest {
