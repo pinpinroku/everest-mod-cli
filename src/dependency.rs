@@ -58,6 +58,11 @@ impl ModDependencyQuery for DependencyGraph {
                         queue.push_back(&dep.name);
                     }
                 }
+            } else {
+                tracing::warn!(
+                    "Could not find the mod matching '{}' in the online database",
+                    current_mod
+                );
             }
         }
 
