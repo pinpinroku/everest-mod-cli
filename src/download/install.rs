@@ -85,9 +85,6 @@ pub async fn install_mod(
                 let pb = mp.add(ProgressBar::new(info.file_size));
                 pb.set_style(style);
 
-                let msg = super::pb_style::truncate_msg(name);
-                pb.set_message(msg.to_string());
-
                 if let Err(e) = download::download_mod(
                     &client,
                     name,

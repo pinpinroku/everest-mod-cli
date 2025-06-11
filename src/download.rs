@@ -8,7 +8,6 @@ use indicatif::ProgressBar;
 use reqwest::{Client, Response};
 use tempfile::NamedTempFile;
 use tokio::io::AsyncWriteExt;
-use tracing::{debug, error};
 use xxhash_rust::xxh64::Xxh64;
 
 use crate::{error::Error, fileutil::replace_home_dir_with_tilde};
@@ -18,13 +17,10 @@ pub mod update;
 
 /// Retrieves the file size of the file from the response header by sending a HEAD request to the target URL.
 async fn get_file_size(client: &Client, url: &str) -> anyhow::Result<u64> {
-    debug!(
-        "Get the file size by sending HEAD request to the server: {}",
-        url
-    );
+    tracing::debug!("Get the file size from: {}", url);
 
     let response = client.head(url).send().await?.error_for_status()?;
-    debug!("Status code: {:#?}", response.status());
+    tracing::debug!("Status code: {:#?}", response.status());
 
     let total_size = response
         .headers()
@@ -32,7 +28,7 @@ async fn get_file_size(client: &Client, url: &str) -> anyhow::Result<u64> {
         .and_then(|length_header| length_header.to_str().ok())
         .and_then(|length_str| length_str.parse::<u64>().ok())
         .unwrap_or(0);
-    debug!("Total size: {}", total_size);
+    tracing::debug!("Total size: {}", total_size);
 
     Ok(total_size)
 }
@@ -99,23 +95,28 @@ pub async fn download_mod(
         replace_home_dir_with_tilde(&install_destination)
     );
 
+    let msg = pb_style::truncate_msg(mod_name);
+
     for url in mirror_urls {
         let response = client.get(url.as_ref()).send().await?;
         if response.status().is_success() {
+            pb.set_message(msg.to_string());
             match download_and_write(response, &install_destination, expected_hashes, pb).await {
                 Ok(()) => {
                     pb.finish_with_message(format!("🍓 {} [{}]", mod_name, filename));
                     return Ok(install_destination);
                 }
                 Err(e) => {
-                    tracing::warn!("Checksum verification failed, trying another mirror");
                     tracing::error!("{}", e);
+                    tracing::warn!("Checksum verification failed, trying another mirror");
+                    pb.set_message("Checksum verification failed, trying another mirror");
                     continue; // to the next mirror
                 }
             }
         } else {
             tracing::warn!("Status: {}", response.status());
             tracing::warn!("Download failed, trying another mirror");
+            pb.set_message("Download failed, trying another mirror");
             continue; // to the next mirror
         }
     }
@@ -143,21 +144,15 @@ async fn download_and_write(
         pb.inc(chunk.len() as u64);
     }
     let computed_hash = hasher.digest();
-
     let hash_str = format!("{:016x}", computed_hash);
-    pb.set_message("🔍 Verifying checksum...");
-    debug!(
-        "Xxhash in u64: {:#?}, formatted string: {:#?}",
-        computed_hash, hash_str
-    );
-    debug!(
-        "Checking computed hash: {} against expected: {:?}",
-        hash_str, expected_hashes
-    );
+
+    tracing::info!("🔍 Verifying checksum...");
+    tracing::debug!("computed hash: {:?}", hash_str,);
+    tracing::debug!("expected hash: {:?}", expected_hashes);
 
     if expected_hashes.contains(&hash_str) {
-        pb.set_message("✅ Checksum verified!");
-        debug!(
+        tracing::info!("✅ Checksum verified!");
+        tracing::info!(
             "Moving the file to the destination: {}",
             replace_home_dir_with_tilde(install_destination)
         );
@@ -165,7 +160,7 @@ async fn download_and_write(
         tokio::fs::copy(temp_file, install_destination).await?;
         Ok(())
     } else {
-        error!("❌ Checksum verification failed!");
+        tracing::error!("❌ Checksum verification failed!");
         // NOTE: The temp file will be removed automatically
         Err(Error::InvalidChecksum {
             file: install_destination.to_path_buf(),
