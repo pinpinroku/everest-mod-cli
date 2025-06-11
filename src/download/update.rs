@@ -1,15 +1,14 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use indicatif::{MultiProgress, ProgressBar};
 use reqwest::Client;
 use tokio::sync::Semaphore;
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
 use crate::{
     config::Config,
     download,
     error::Error,
-    fileutil,
     local::{Generatable, LocalMod},
     mod_registry::{ModRegistryQuery, RemoteModRegistry},
 };
@@ -23,8 +22,6 @@ pub struct AvailableUpdate {
     url: String,
     /// xxHashes of the file
     hashes: Vec<String>,
-    /// Path to the current version of the mod
-    existing_path: PathBuf,
 }
 
 /// Checks for an available update for a mod.
@@ -74,7 +71,6 @@ async fn check_update(
         name: manifest.name.to_string(),
         url: remote_mod.download_url.clone(),
         hashes: remote_mod.checksums.clone(),
-        existing_path: local_mod.file_path().to_path_buf(),
     }))
 }
 
@@ -143,38 +139,8 @@ pub async fn check_updates(
     Ok(updates)
 }
 
-/// Updates a mod, deletes the previous version of the file if the update succeeds.
-async fn update(
-    client: &Client,
-    update_info: &AvailableUpdate,
-    pb: &ProgressBar,
-    config: &Config,
-) -> anyhow::Result<()> {
-    let mirror_urls =
-        mirror_list::get_all_mirror_urls(&update_info.url, config.mirror_preferences());
-    download::download_mod(
-        client,
-        &update_info.name,
-        &mirror_urls,
-        &update_info.hashes,
-        config.directory(),
-        pb,
-    )
-    .await?;
-
-    if update_info.existing_path.exists() {
-        tokio::fs::remove_file(&update_info.existing_path).await?;
-        debug!(
-            "🗑️ The previous version has been deleted. {}",
-            fileutil::replace_home_dir_with_tilde(&update_info.existing_path)
-        );
-    }
-
-    Ok(())
-}
-
 /// Updates all mods that can be updated concurrently.
-pub async fn update_multiple_mods(
+pub async fn update_mods(
     client: &Client,
     available_updates: Vec<AvailableUpdate>,
     config: &Config,
@@ -196,6 +162,7 @@ pub async fn update_multiple_mods(
         let handle = tokio::spawn(async move {
             let _permit = semaphore.acquire().await?;
 
+            // HACK: We can use `remote_mod.file_size`, no need to fetch the value from the server.
             let total_size = super::get_file_size(&client, &available_update.url).await?;
             let pb = mp.add(ProgressBar::new(total_size));
             pb.set_style(style);
@@ -203,7 +170,20 @@ pub async fn update_multiple_mods(
             let msg = super::pb_style::truncate_msg(&available_update.name);
             pb.set_message(msg.to_string());
 
-            update(&client, &available_update, &pb, &config).await?;
+            let mirror_urls = mirror_list::get_all_mirror_urls(
+                &available_update.url,
+                config.mirror_preferences(),
+            );
+
+            download::download_mod(
+                &client,
+                &available_update.name,
+                &mirror_urls,
+                &available_update.hashes,
+                config.directory(),
+                &pb,
+            )
+            .await?;
 
             drop(_permit);
 

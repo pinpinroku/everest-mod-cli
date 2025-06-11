@@ -187,7 +187,7 @@ async fn run() -> Result<()> {
                 let client = Client::builder()
                     .connect_timeout(Duration::from_secs(5))
                     .build()?;
-                update::update_multiple_mods(&client, available_updates, &config).await?;
+                update::update_mods(&client, available_updates, &config).await?;
             } else {
                 println!("\nRun with --install to install these updates");
             }

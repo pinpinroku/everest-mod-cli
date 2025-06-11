@@ -86,7 +86,10 @@ pub async fn download_mod(
     download_dir: &Path,
     pb: &ProgressBar,
 ) -> anyhow::Result<PathBuf> {
+    tracing::debug!("Original mod name: {}", mod_name);
     let sanitized_name = sanitize(mod_name);
+
+    tracing::debug!("Sanitized name: {}", sanitized_name);
     let filename = format!("{}.zip", &sanitized_name);
 
     let install_destination = download_dir.join(&filename);
@@ -152,12 +155,25 @@ async fn download_and_write(
 
     if expected_hashes.contains(&hash_str) {
         tracing::info!("✅ Checksum verified!");
+
+        // Remove old file if it exists
+        if install_destination.exists() {
+            tracing::info!(
+                "🗑  The previous version has been deleted. {}",
+                replace_home_dir_with_tilde(install_destination)
+            );
+            tokio::fs::remove_file(install_destination).await?;
+        }
+
         tracing::info!(
             "Moving the file to the destination: {}",
             replace_home_dir_with_tilde(install_destination)
         );
-        // NOTE: The permissions are set to 0600
+
+        // NOTE: The permissions are set to 0600 because of copy operation.
+        // This is a restriction in the linux system which uses tempfs as external mount point.
         tokio::fs::copy(temp_file, install_destination).await?;
+
         Ok(())
     } else {
         tracing::error!("❌ Checksum verification failed!");
