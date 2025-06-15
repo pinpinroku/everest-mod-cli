@@ -122,13 +122,9 @@ pub fn read_manifest_file_from_archive(archive_path: &Path) -> Result<Vec<u8>, E
 }
 
 /// Computes the xxhash of a given file and returns it as a hexadecimal string.
-///
-/// # Arguments
-/// * `file_path` - A reference to the `Path` of the file to be hashed.
-///
-/// # Returns
-/// * `Ok(String)` - The hexadecimal representation of the file hash.
-/// * `Err(Error)` - An error if the file could not be read.
+/// 
+/// # Errors
+/// Returns an error if the file cannot be opened or read.
 pub fn hash_file(file_path: &Path) -> anyhow::Result<String> {
     let debug_filename = replace_home_dir_with_tilde(file_path);
     tracing::debug!("Computing checksum for {}", debug_filename);

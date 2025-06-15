@@ -79,9 +79,8 @@ impl Generatable for LocalMod {
 
     /// Compute checksum if not already computed, then cache it.
     ///
-    /// # Returns
-    /// * `Ok(&str)` - Computed checksum as a string reference.
-    /// * `Err(Error)` - If the file could not be read.
+    /// # Errors
+    /// Returns an error if the file cannot be read.
     fn checksum(&self) -> anyhow::Result<&str> {
         self.checksum
             .get_or_try_init(|| {

@@ -12,6 +12,7 @@ use crate::{
     mod_registry::{RemoteModInfo, RemoteModRegistry},
 };
 
+/// Checks for updates to the local mods against the remote mod registry.
 pub fn check_updates(
     local_mods: &[LocalMod],
     remote_map: Arc<RemoteModRegistry>,
@@ -45,6 +46,10 @@ pub fn check_updates(
         .collect()
 }
 
+/// Installs updates for the mods that have available updates.
+/// 
+/// # Errors
+/// Returns an error if any of the downloads fail or if there are issues with the tasks.
 pub async fn install_updates(
     client: &Client,
     config: Arc<Config>,
