@@ -132,11 +132,7 @@ impl Generatable for LocalMod {
             .filter_map(|archive_path| match Self::from_path(archive_path) {
                 Ok(local_mod) => Some(local_mod),
                 Err(e) => {
-                    tracing::warn!(
-                        "Failed to read manifest from '{}': {}",
-                        replace_home_dir_with_tilde(archive_path),
-                        e
-                    );
+                    tracing::warn!("{}", e);
                     None
                 }
             })
