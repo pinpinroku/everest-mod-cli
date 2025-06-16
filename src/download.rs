@@ -1,64 +1,17 @@
-use std::{
-    borrow::Cow,
-    fs,
-    io::Write,
-    path::Path,
-};
+use std::{borrow::Cow, fs, io::Write, path::Path, sync::Arc, time::Duration};
 
 use futures_util::StreamExt;
-use indicatif::ProgressBar;
+use indicatif::{MultiProgress, ProgressBar};
 use reqwest::{Client, Response};
 use tempfile::NamedTempFile;
+use tokio::sync::Semaphore;
 use xxhash_rust::xxh64::Xxh64;
 
-use crate::{error::Error, fileutil};
+use crate::{config::Config, download, error::Error, fileutil, mod_registry::RemoteModInfo};
 
 pub mod install;
 pub mod update;
-
-/// Returns sanitized mod name or "unnamed" if the given mod name is empty.
-fn sanitize(mod_name: &str) -> Cow<'_, str> {
-    const BAD_CHARS: [char; 6] = ['/', '\\', '*', '?', ':', ';'];
-
-    let trimmed = mod_name.trim();
-    let without_dot = trimmed.strip_prefix('.').unwrap_or(trimmed);
-
-    let mut changed = false;
-    let mut result = String::with_capacity(without_dot.len());
-
-    for c in without_dot
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-    {
-        let replacement = match c {
-            '\r' | '\n' | '\0' => {
-                changed = true;
-                continue;
-            }
-            c if BAD_CHARS.contains(&c) => {
-                changed = true;
-                '_'
-            }
-            c => c,
-        };
-        result.push(replacement);
-    }
-
-    if result.len() > 255 {
-        result.truncate(255);
-        changed = true;
-    }
-
-    if result.is_empty() {
-        Cow::Borrowed("unnamed")
-    } else if !changed && result == mod_name {
-        Cow::Borrowed(mod_name)
-    } else {
-        Cow::Owned(result)
-    }
-}
+pub mod util;
 
 /// Downloads a mod file, returns the file path.
 pub async fn download_mod(
@@ -70,7 +23,7 @@ pub async fn download_mod(
     pb: &ProgressBar,
 ) -> anyhow::Result<()> {
     tracing::debug!("Original mod name: {}", mod_name);
-    let sanitized_name = sanitize(mod_name);
+    let sanitized_name = super::util::sanitize(mod_name);
 
     tracing::debug!("Sanitized name: {}", sanitized_name);
     let filename = format!("{}.zip", &sanitized_name);
@@ -165,6 +118,83 @@ async fn download_and_write(
     }
 }
 
+/// Downloads mods concurrently with a limit on the number of concurrent downloads.
+///
+/// # Errors
+/// Returns an error if any of the downloads fail or if there are issues with the tasks.
+pub async fn download_mods_concurrently(
+    mods: &[(String, RemoteModInfo)],
+    config: Arc<Config>,
+    concurrent_limit: usize,
+) -> anyhow::Result<()> {
+    let semaphore = Arc::new(Semaphore::new(concurrent_limit));
+    let mp = MultiProgress::new();
+    let client = Client::builder()
+        .connect_timeout(Duration::from_secs(5))
+        .build()?;
+
+    let mut handles = Vec::with_capacity(mods.len());
+
+    for (name, remote_mod) in mods {
+        let semaphore = semaphore.clone();
+        let config = config.clone();
+        let client = client.clone();
+        let mp = mp.clone();
+        let name = name.clone();
+        let remote_mod = remote_mod.clone();
+
+        let handle = tokio::spawn(async move {
+            let _permit = semaphore.acquire().await?;
+            let pb = mp.add(ProgressBar::new(remote_mod.file_size));
+            pb.set_style(pb_style::new());
+            let msg = pb_style::truncate_msg(&name);
+            pb.set_message(msg.to_string());
+
+            let mirror_urls = mirror_list::get_all_mirror_urls(
+                &remote_mod.download_url,
+                config.mirror_preferences(),
+            );
+
+            download::download_mod(
+                &client,
+                &name,
+                &mirror_urls,
+                &remote_mod.checksums,
+                config.directory(),
+                &pb,
+            )
+            .await
+        });
+        handles.push(handle);
+    }
+
+    let mut errors = Vec::with_capacity(handles.len());
+    for handle in handles {
+        match handle.await {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => {
+                tracing::error!("Failed to download the mod: {}", err);
+                errors.push(err);
+            }
+            Err(err) => {
+                tracing::error!("Failed to join tasks: {}", err);
+                errors.push(err.into());
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        tracing::info!("Successfully download the mods")
+    } else {
+        for (i, error) in errors.iter().enumerate() {
+            tracing::error!("Error {}: {}", i + 1, error)
+        }
+        anyhow::bail!("Failed to download the mods: {:?}", errors)
+    }
+
+    Ok(())
+}
+
 /// Style configurations of a progress bar.
 pub mod pb_style {
     use indicatif::{ProgressBar, ProgressStyle};
@@ -248,145 +278,6 @@ pub mod pb_style {
             let msg = "";
             let result = truncate_msg(msg);
             assert_eq!(result, msg);
-        }
-    }
-}
-
-/// Utility functions for determining filenames and handling mod download metadata.
-#[allow(dead_code)]
-mod download_util {
-    use reqwest::{Url, header::HeaderMap};
-    use uuid::Uuid;
-
-    /// Determines the most appropriate filename for a downloaded mod using the URL and headers.
-    ///
-    /// # Arguments
-    /// - `url`: The URL from which to extract the filename.
-    /// - `headers`: The HTTP headers from which to extract the ETag.
-    pub fn determine_filename(url: &Url, headers: &HeaderMap) -> String {
-        extract_filename_from_url(url)
-            .or_else(|| extract_filename_from_etag(headers))
-            .unwrap_or_else(|| format!("unknown-mod_{}.zip", Uuid::new_v4()))
-    }
-
-    /// Extracts a filename from the last segment of a URL path.
-    fn extract_filename_from_url(url: &Url) -> Option<String> {
-        url.path_segments()
-            .and_then(|mut segments| segments.next_back().filter(|&segment| !segment.is_empty()))
-            .map(String::from)
-    }
-
-    /// Extracts a filename from the ETag header, appending a `.zip` extension.
-    fn extract_filename_from_etag(headers: &HeaderMap) -> Option<String> {
-        headers
-            .get(reqwest::header::ETAG)
-            .and_then(|etag_value| etag_value.to_str().ok())
-            .map(|etag| etag.trim_matches('"'))
-            .map(|etag| format!("{}.zip", etag))
-    }
-
-    #[cfg(test)]
-    mod tests_util {
-        use super::*;
-        use reqwest::{
-            Url,
-            header::{HeaderMap, HeaderValue},
-        };
-        use uuid::Uuid;
-
-        #[test]
-        fn test_extract_filename_from_url_valid() {
-            let url = Url::parse("https://files.gamebanana.com/mods/hateline_v022.zip").unwrap();
-            let result = extract_filename_from_url(&url);
-            assert_eq!(result, Some("hateline_v022.zip".to_string()));
-        }
-
-        #[test]
-        fn test_extract_filename_from_url_empty_segment() {
-            let url = Url::parse("https://gamebanana.com/mods/").unwrap();
-            let result = extract_filename_from_url(&url);
-            assert_eq!(result, None);
-        }
-
-        #[test]
-        fn test_extract_filename_from_url_no_segments() {
-            let url = Url::parse("https://gamebanana.com").unwrap();
-            let result = extract_filename_from_url(&url);
-            assert_eq!(result, None);
-        }
-
-        #[test]
-        fn test_extract_filename_from_etag_valid() {
-            let mut headers = HeaderMap::new();
-            headers.insert(
-                reqwest::header::ETAG,
-                HeaderValue::from_static("\"eclair\""),
-            );
-            let result = extract_filename_from_etag(&headers);
-            assert_eq!(result, Some("eclair.zip".to_string()));
-        }
-
-        #[test]
-        fn test_extract_filename_from_etag_missing() {
-            let headers = HeaderMap::new();
-            let result = extract_filename_from_etag(&headers);
-            assert_eq!(result, None);
-        }
-
-        #[test]
-        fn test_extract_filename_from_etag_invalid() {
-            let mut headers = HeaderMap::new();
-            headers.insert(
-                reqwest::header::ETAG,
-                HeaderValue::from_static("invalid-etag"),
-            );
-            let result = extract_filename_from_etag(&headers);
-            assert_eq!(result, Some("invalid-etag.zip".to_string()));
-        }
-
-        #[test]
-        fn test_determine_filename_from_url() {
-            let url = Url::parse("https://files.gamebanana.com/mods/hateline_v022.zip").unwrap();
-            let headers = HeaderMap::new();
-            let result = determine_filename(&url, &headers);
-            assert_eq!(result, "hateline_v022.zip");
-        }
-
-        #[test]
-        fn test_determine_filename_from_etag() {
-            let url = Url::parse("https://gamebanana.com/mods/").unwrap();
-            let mut headers = HeaderMap::new();
-            headers.insert(reqwest::header::ETAG, HeaderValue::from_static("\"glyph\""));
-            let result = determine_filename(&url, &headers);
-            assert_eq!(result, "glyph.zip");
-        }
-
-        #[test]
-        fn test_determine_filename_fallback_to_uuid() {
-            let url = Url::parse("https://gamebanana.com").unwrap();
-            let headers = HeaderMap::new();
-            let result = determine_filename(&url, &headers);
-            assert!(result.starts_with("unknown-mod_"));
-            assert!(result.ends_with(".zip"));
-            // Verify the UUID part is valid
-            let uuid_str = result
-                .strip_prefix("unknown-mod_")
-                .unwrap()
-                .strip_suffix(".zip")
-                .unwrap();
-            Uuid::parse_str(uuid_str).expect("Generated filename should contain a valid UUID");
-        }
-
-        #[test]
-        fn test_determine_filename_url_preferred_over_etag() {
-            let url = Url::parse("https://files.gamebanana.com/mods/hateline_v022.zip").unwrap();
-            let mut headers = HeaderMap::new();
-            headers.insert(
-                reqwest::header::ETAG,
-                HeaderValue::from_static("\"hateline\""),
-            );
-            let result = determine_filename(&url, &headers);
-            assert_eq!(result, "hateline_v022.zip");
         }
     }
 }

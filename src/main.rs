@@ -16,7 +16,7 @@ mod mod_registry;
 
 use cli::{Cli, Commands};
 use config::Config;
-use download::{install, update};
+use download::{install, update, util};
 use mod_registry::{ModRegistryQuery, RemoteModRegistry};
 
 fn setup_logging(verbose: bool) {
@@ -132,7 +132,7 @@ async fn run() -> Result<()> {
 
         // Install a mod by fetching its information from the mod registry.
         Commands::Install(args) => {
-            let mod_id = install::parse_mod_page_url(&args.mod_page_url)?;
+            let mod_id = util::parse_mod_page_url(&args.mod_page_url)?;
             // Fetching online database
             let (mod_registry, dependency_graph) = fetch::fetch_online_database().await?;
 
@@ -152,14 +152,21 @@ async fn run() -> Result<()> {
                 return Ok(());
             }
 
-            download::install::install_mod(
+            let downloadable_mods = install::check_dependencies(
                 mod_name,
                 &mod_registry,
                 &dependency_graph,
                 &installed_mod_names,
-                config,
-            )
-            .await?;
+            );
+            if downloadable_mods.is_empty() {
+                println!(
+                    "All dependencies for mod [{}] are already installed",
+                    mod_name
+                );
+                return Ok(());
+            }
+            println!("Downloading mod [{}] and its dependencies...", mod_name);
+            download::download_mods_concurrently(&downloadable_mods, config, 6).await?;
         }
 
         Commands::Update(args) => {
@@ -188,7 +195,7 @@ async fn run() -> Result<()> {
                 println!("All mods are up to date!");
             } else if args.install {
                 println!("\nInstalling updates...");
-                update::install_updates(config, &available_updates).await?;
+                download::download_mods_concurrently(&available_updates, config, 6).await?;
             } else {
                 println!("\nRun with --install to install these updates");
             }

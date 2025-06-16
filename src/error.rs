@@ -57,7 +57,10 @@ pub enum Error {
     /// Missing entry in the manifest file "everest.yaml"
     #[error("manifest file doesn't have any entries: {0:#?}")]
     MissingManifestEntry(VecDeque<ModManifest>),
+}
 
+#[derive(Debug, Error)]
+pub enum ModPageUrlParseError {
     /// Invalid URL
     #[error("invalid URL: {0}")]
     InvalidUrl(String),
