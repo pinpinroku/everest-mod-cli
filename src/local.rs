@@ -184,4 +184,50 @@ mod tests_for_files {
         let result = ModManifest::from_yaml(yaml.as_bytes());
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_from_yaml_parse_empty_manifest() {
+        let yaml = b"[]";
+
+        let result = ModManifest::from_yaml(yaml);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+}
+
+#[cfg(test)]
+mod tests_local_mod {
+    use super::*;
+
+    #[test]
+    fn test_checksum_computation() {
+        let mod_path = PathBuf::from("./test/test-mod.zip");
+        let local_mod = LocalMod::from_path(&mod_path).unwrap();
+        let checksum = local_mod.checksum().unwrap();
+        assert!(!checksum.is_empty());
+    }
+
+    #[test]
+    fn test_from_path_valid_file() {
+        let valid_path = PathBuf::from("./test/test-mod.zip");
+        let result = LocalMod::from_path(&valid_path);
+        assert!(result.is_ok());
+        let local_mod = result.unwrap();
+        assert_eq!(local_mod.file_path, valid_path);
+    }
+
+    #[test]
+    fn test_from_path_invalid_file() {
+        let invalid_path = PathBuf::from("invalid_mod.zip");
+        let result = LocalMod::from_path(&invalid_path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_load_local_mods() {
+        let archive_paths = vec![PathBuf::from("./test/test-mod.zip")];
+        let local_mods = LocalMod::load_local_mods(&archive_paths);
+        assert!(!local_mods.is_empty());
+        assert_eq!(local_mods[0].manifest.name, "test-mod");
+    }
 }
