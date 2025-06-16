@@ -1,17 +1,13 @@
 use std::{
     borrow::Cow,
-    collections::HashSet,
     env,
     fs::File,
-    io::{BufRead, BufReader, Read},
-    path::{Path, PathBuf},
+    io::{BufReader, Read},
+    path::Path,
 };
 
-use anyhow::Context;
+use anyhow::{Context, Result};
 use xxhash_rust::xxh64::Xxh64;
-
-use crate::constant::UPDATER_BLACKLIST_FILE;
-use crate::error::Error;
 
 /// Replaces `/home/user/` with `~/`
 pub fn replace_home_dir_with_tilde(destination: &Path) -> Cow<'_, str> {
@@ -32,7 +28,7 @@ pub fn replace_home_dir_with_tilde(destination: &Path) -> Cow<'_, str> {
 ///
 /// # Errors
 /// Returns an error if the file cannot be opened or read.
-pub fn hash_file(file_path: &Path) -> anyhow::Result<String> {
+pub fn hash_file(file_path: &Path) -> Result<String> {
     let debug_filename = replace_home_dir_with_tilde(file_path);
     tracing::debug!("Computing checksum for {}", debug_filename);
 
@@ -54,58 +50,12 @@ pub fn hash_file(file_path: &Path) -> anyhow::Result<String> {
     Ok(hash_str)
 }
 
-/// Returns a set of file paths if any are found in the `updaterblacklist.txt`.
-///
-/// Returns `None` if the file is not found in the given mods directory.
-///
-/// # Errors
-/// Returns an error if the file cannot be opened.
-pub fn read_updater_blacklist(mods_directory: &Path) -> Result<Option<HashSet<PathBuf>>, Error> {
-    tracing::info!("Checking for the blacklisted mods...");
-    let path = mods_directory.join(UPDATER_BLACKLIST_FILE);
-
-    if !path.exists() {
-        return Ok(None);
-    }
-
-    let file = File::open(&path)?;
-    let reader = BufReader::new(file);
-
-    // NOTE: Stores the results in HashSet for O(1) lookups
-    let mut filenames: HashSet<PathBuf> = HashSet::new();
-    for (line_number, line_result) in reader.lines().enumerate() {
-        match line_result {
-            Ok(line) => {
-                let trimmed = line.trim();
-                if trimmed.is_empty() || trimmed.starts_with('#') {
-                    tracing::debug!("Skipping line {}: '{}'", line_number + 1, trimmed);
-                    continue;
-                }
-                // NOTE: It is easier to compare them as full paths.
-                filenames.insert(mods_directory.join(trimmed));
-            }
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to read line {} in {}: {}",
-                    line_number + 1,
-                    path.display(),
-                    e
-                );
-                continue;
-            }
-        }
-    }
-
-    tracing::debug!("Blacklist contains {} entries.", filenames.len());
-
-    Ok(Some(filenames))
-}
-
 #[cfg(test)]
 mod tests_fileutil {
     use super::*;
+
     use std::io::Write;
-    use tempfile::{NamedTempFile, tempdir};
+    use tempfile::NamedTempFile;
 
     #[test]
     fn test_replace_home_dir() {
@@ -138,36 +88,5 @@ mod tests_fileutil {
         let result = hash_file(nonexistent_path);
 
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_read_updater_blacklist_success() {
-        let temp_dir = tempdir().unwrap();
-        let blacklist_file = temp_dir.path().join(UPDATER_BLACKLIST_FILE);
-
-        let mut file = File::create(&blacklist_file).unwrap();
-        writeln!(file, "blacklisted_mod_1.zip").unwrap();
-        writeln!(file, "blacklisted_mod_2.zip").unwrap();
-
-        let result = read_updater_blacklist(temp_dir.path());
-        assert!(result.is_ok());
-
-        let optional_blacklist = result.unwrap();
-        assert!(optional_blacklist.is_some());
-
-        let blacklist = optional_blacklist.unwrap();
-        assert!(blacklist.contains(&temp_dir.path().join("blacklisted_mod_1.zip")));
-        assert!(blacklist.contains(&temp_dir.path().join("blacklisted_mod_2.zip")));
-    }
-
-    #[test]
-    fn test_read_updater_blacklist_missing() {
-        let temp_dir = tempdir().unwrap();
-
-        let result = read_updater_blacklist(temp_dir.path());
-        assert!(result.is_ok());
-
-        let optional_blacklist = result.unwrap();
-        assert!(optional_blacklist.is_none());
     }
 }

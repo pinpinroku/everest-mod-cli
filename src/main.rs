@@ -169,7 +169,7 @@ async fn run() -> Result<()> {
         Commands::Update(args) => {
             // Filter installed mods according to the `updaterblacklist.txt`
             let mut local_mods = LocalMod::load_local_mods(&archive_paths);
-            if let Some(blacklist) = fileutil::read_updater_blacklist(mods_directory)? {
+            if let Some(blacklist) = config.read_updater_blacklist()? {
                 local_mods.retain(|local_mod| !blacklist.contains(&local_mod.file_path));
             }
 
