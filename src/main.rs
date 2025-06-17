@@ -1,9 +1,7 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use anyhow::Result;
 use clap::Parser;
-use reqwest::Client;
-use tokio::sync::Semaphore;
 
 mod cli;
 mod config;
@@ -16,10 +14,13 @@ mod fileutil;
 mod local;
 mod mod_registry;
 
-use cli::{Cli, Commands};
-use config::Config;
-use download::{install, update};
-use mod_registry::{ModRegistryQuery, RemoteModRegistry};
+use crate::{
+    cli::{Cli, Commands},
+    config::Config,
+    dependency::ModDependencyQuery,
+    local::LocalMod,
+    mod_registry::{ModRegistryQuery, RemoteModRegistry},
+};
 
 fn setup_logging(verbose: bool) {
     use tracing_subscriber::{
@@ -71,7 +72,7 @@ async fn run() -> Result<()> {
     );
 
     // Gathering mod paths
-    let archive_paths = fileutil::find_installed_mod_archives(mods_directory)?;
+    let archive_paths = config.find_installed_mod_archives()?;
 
     match &cli.command {
         // Show mod name and file name of installed mods.
@@ -81,7 +82,7 @@ async fn run() -> Result<()> {
                 return Ok(());
             }
 
-            let local_mods = local::load_local_mods(&archive_paths)?;
+            let local_mods = LocalMod::load_local_mods(&archive_paths);
 
             local_mods.iter().for_each(|local_mod| {
                 if let Some(os_str) = local_mod.file_path.file_name() {
@@ -100,7 +101,7 @@ async fn run() -> Result<()> {
         Commands::Show(args) => {
             tracing::info!("Checking installed mod information...");
 
-            let local_mods = local::load_local_mods(&archive_paths)?;
+            let local_mods = LocalMod::load_local_mods(&archive_paths);
 
             if let Some(local_mod) = local_mods.iter().find(|m| m.manifest.name == args.name) {
                 println!(
@@ -134,7 +135,7 @@ async fn run() -> Result<()> {
 
         // Install a mod by fetching its information from the mod registry.
         Commands::Install(args) => {
-            let mod_id = install::parse_mod_page_url(&args.mod_page_url)?;
+            let mod_id = args.parse_mod_page_url()?;
             // Fetching online database
             let (mod_registry, dependency_graph) = fetch::fetch_online_database().await?;
 
@@ -147,28 +148,30 @@ async fn run() -> Result<()> {
                 }
             };
 
-            let local_mods = local::load_local_mods(&archive_paths)?;
-            let installed_mod_names = local::collect_installed_mod_names(local_mods)?;
+            let installed_mod_names = LocalMod::names(&archive_paths);
             if installed_mod_names.contains(mod_name) {
                 println!("You already have [{}] installed.", mod_name);
                 return Ok(());
             }
 
-            download::install::install_mod(
-                mod_name,
-                &mod_registry,
-                &dependency_graph,
-                &installed_mod_names,
-                &config,
-            )
-            .await?;
+            let downloadable_mods =
+                dependency_graph.check_dependencies(mod_name, &mod_registry, &installed_mod_names);
+            if downloadable_mods.is_empty() {
+                println!(
+                    "All dependencies for mod [{}] are already installed",
+                    mod_name
+                );
+                return Ok(());
+            }
+            println!("Downloading mod [{}] and its dependencies...", mod_name);
+            download::download_mods_concurrently(&downloadable_mods, config, 6).await?;
         }
 
         Commands::Update(args) => {
             // Filter installed mods according to the `updaterblacklist.txt`
-            let mut local_mods = local::load_local_mods(&archive_paths)?;
-            if let Some(blacklist) = fileutil::read_updater_blacklist(mods_directory)? {
-                local::remove_blacklisted_mods(&mut local_mods, &blacklist);
+            let mut local_mods = LocalMod::load_local_mods(&archive_paths);
+            if let Some(blacklist) = config.read_updater_blacklist()? {
+                local_mods.retain(|local_mod| !blacklist.contains(&local_mod.file_path));
             }
 
             // Update installed mods by checking for available updates in the mod registry.
@@ -182,22 +185,15 @@ async fn run() -> Result<()> {
             spinner.finish_and_clear();
             drop(spinner);
 
-            let semaphore = Arc::new(Semaphore::new(64));
             let registry = Arc::new(mod_registry);
-            let config = Arc::new(config);
 
-            let available_updates = update::check_updates(&local_mods, registry, semaphore).await?;
+            let available_updates = registry.check_updates(&local_mods);
 
             if available_updates.is_empty() {
                 println!("All mods are up to date!");
             } else if args.install {
                 println!("\nInstalling updates...");
-
-                let install_client = Client::builder()
-                    .connect_timeout(Duration::from_secs(5))
-                    .build()?;
-
-                update::install_updates(&install_client, config, &available_updates).await?;
+                download::download_mods_concurrently(&available_updates, config, 6).await?;
             } else {
                 println!("\nRun with --install to install these updates");
             }
