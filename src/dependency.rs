@@ -90,14 +90,20 @@ impl ModDependencyQuery for DependencyGraph {
         mod_registry: &RemoteModRegistry,
         installed_mod_names: &HashSet<String>,
     ) -> Vec<(String, RemoteModInfo)> {
+        tracing::info!("Checking dependencies for mod: {}", mod_name);
+
         // Collects required dependencies for the mod including the mod itself
         let dependencies = self.collect_all_dependencies_bfs(mod_name);
+
+        tracing::debug!("Installed mods: {:?}", installed_mod_names);
+        tracing::debug!("Dependencies to check: {:?}", dependencies);
 
         // Filters out missing dependencies
         let missing_deps = dependencies
             .difference(installed_mod_names)
             .collect::<Vec<_>>();
-        tracing::debug!("Missing dependencies are found: {:?}", missing_deps);
+
+        tracing::info!("Missing dependencies: {:?}", missing_deps);
 
         missing_deps
             .iter()

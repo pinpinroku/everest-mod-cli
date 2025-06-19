@@ -61,16 +61,18 @@ async fn run() -> Result<()> {
 
     let cli = Cli::parse();
 
+    tracing::debug!("Passed CLI arguments: {:#?}", &cli);
     tracing::debug!("Command passed: {:?}", &cli.command);
 
     let config = Config::new(&cli)?;
 
     // Determine the mods directory.
     let mods_directory = config.directory();
-    tracing::debug!(
-        "Determined mods directory: {}",
+    tracing::info!(
+        "Using mods directory: {}",
         fileutil::replace_home_dir_with_tilde(mods_directory)
     );
+    tracing::info!("Mirror preference: {}", config.mirror_preferences());
 
     // Gathering mod paths
     let archive_paths = config.find_installed_mod_archives()?;

@@ -74,6 +74,7 @@ async fn download_and_write(
     let mut stream = response.bytes_stream();
     let mut hasher = Xxh64::new(0);
 
+    tracing::info!("Verifying checksum for {}", debug_filename);
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
         temp_file.write_all(&chunk)?;
@@ -83,9 +84,9 @@ async fn download_and_write(
     let computed_hash = hasher.digest();
     let hash_str = format!("{:016x}", computed_hash);
 
-    tracing::info!("Start checksum verification");
     tracing::debug!("computed hash: {:?}", hash_str,);
     tracing::debug!("expected hash: {:?}", expected_hashes);
+    tracing::info!("Checksum verification passed for {}", debug_filename);
 
     if !expected_hashes.contains(&hash_str) {
         anyhow::bail!(
@@ -126,6 +127,21 @@ pub async fn download_mods_concurrently(
     config: Arc<Config>,
     concurrent_limit: usize,
 ) -> Result<()> {
+    tracing::info!(
+        "Preparing to download {} mods with concurrency limit {}",
+        mods.len(),
+        concurrent_limit
+    );
+    tracing::debug!(
+        "Mods to download: {:?}",
+        mods.iter().map(|(n, _)| n).collect::<Vec<_>>()
+    );
+
+    if mods.is_empty() {
+        tracing::info!("No mods to download");
+        return Ok(());
+    }
+
     let semaphore = Arc::new(Semaphore::new(concurrent_limit));
     let mp = MultiProgress::new();
     let client = Client::builder()

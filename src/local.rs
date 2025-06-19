@@ -125,6 +125,7 @@ impl LocalMod {
     pub fn load_local_mods(archive_paths: &[PathBuf]) -> Vec<Self> {
         use rayon::prelude::*;
 
+        tracing::info!("Found {} mod archives to load", archive_paths.len());
         tracing::info!("Start parsing archive files.");
         let mut local_mods: Vec<Self> = archive_paths
             .par_iter()
@@ -136,6 +137,7 @@ impl LocalMod {
                 }
             })
             .collect();
+        tracing::info!("Successfully loaded {} local mods", local_mods.len());
 
         tracing::info!("Sorting the installed mods by name...");
         local_mods.sort_by(|a, b| a.manifest.name.cmp(&b.manifest.name));
