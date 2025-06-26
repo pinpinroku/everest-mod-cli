@@ -35,6 +35,10 @@ pub struct Cli {
     )]
     pub mirror_preferences: String,
 
+    /// Verbose mode: Write verbose logs to the file
+    #[arg(short, long)]
+    pub verbose: bool,
+
     /// The subcommand to execute
     #[command(subcommand)]
     pub command: Commands,

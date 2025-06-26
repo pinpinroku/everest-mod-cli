@@ -24,7 +24,7 @@ use crate::{
 };
 
 /// Initialize logger
-fn setup_logger() -> Result<()> {
+fn setup_logger(verbose: bool) -> Result<()> {
     let state_home = env::home_dir()
         .context("Could not determine home directory")?
         .join(".local/state/everest-mod-cli/");
@@ -37,10 +37,16 @@ fn setup_logger() -> Result<()> {
         .build(state_home)
         .context("Failed to initialize rolling appender")?;
 
+    let log_level = if verbose {
+        "everest_mod_cli=debug"
+    } else {
+        "everest_mod_cli=error"
+    };
+
     // construct a subscriber that prints formatted traces to stdout
     let subscriber = tracing_subscriber::fmt()
         .compact()
-        .with_env_filter("everest_mod_cli=debug")
+        .with_env_filter(log_level)
         .with_file(true)
         .with_line_number(true)
         .with_thread_ids(true)
@@ -55,11 +61,11 @@ fn setup_logger() -> Result<()> {
 }
 
 async fn run() -> Result<()> {
-    setup_logger()?;
+    let cli = Cli::parse();
+
+    setup_logger(cli.verbose)?;
 
     tracing::info!("Application starts");
-
-    let cli = Cli::parse();
 
     tracing::debug!("Passed CLI arguments: {:#?}", &cli);
     tracing::debug!("Command passed: {:?}", &cli.command);
