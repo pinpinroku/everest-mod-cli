@@ -1,8 +1,7 @@
-use std::{env, sync::Arc};
+use std::{env, fs, fs::File, sync::Arc};
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use tracing_appender::rolling::{RollingFileAppender, Rotation};
 
 mod cli;
 mod config;
@@ -25,18 +24,15 @@ use crate::{
 
 /// Initialize logger
 fn setup_logger(verbose: bool) -> Result<()> {
-    let state_home = env::home_dir()
+    let log_dir = env::home_dir()
         .context("Could not determine home directory")?
         .join(".local/state/everest-mod-cli/");
+    fs::create_dir_all(&log_dir).context("Failed to create log directory")?;
 
-    // Create a file appender that will write logs to files in a `logs` directory
-    let file_appender = RollingFileAppender::builder()
-        .rotation(Rotation::NEVER)
-        .filename_prefix("everest-mod-cli")
-        .filename_suffix("log")
-        .build(state_home)
-        .context("Failed to initialize rolling appender")?;
+    let log_file_path = log_dir.join("everest-mod-cli.log");
+    let log_file = File::create(&log_file_path).context("Failed to create log file")?;
 
+    // Determine the log level based on verbosity
     let log_level = if verbose {
         "everest_mod_cli=debug"
     } else {
@@ -51,12 +47,13 @@ fn setup_logger(verbose: bool) -> Result<()> {
         .with_line_number(true)
         .with_thread_ids(true)
         .with_target(false)
-        .with_writer(file_appender)
+        .with_writer(log_file)
         .with_ansi(false)
         .finish();
 
     // Start configuring a `fmt` subscriber
     tracing::subscriber::set_global_default(subscriber)?;
+
     Ok(())
 }
 
