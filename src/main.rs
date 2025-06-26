@@ -1,6 +1,6 @@
-use std::sync::Arc;
+use std::{env, fs, fs::File, sync::Arc};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 
 mod cli;
@@ -22,54 +22,60 @@ use crate::{
     mod_registry::{ModRegistryQuery, RemoteModRegistry},
 };
 
-fn setup_logging(verbose: bool) {
-    use tracing_subscriber::{
-        Layer, filter::LevelFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt,
+/// Initialize logger
+fn setup_logger(verbose: bool) -> Result<()> {
+    let log_dir = env::home_dir()
+        .context("Could not determine home directory")?
+        .join(".local/state/everest-mod-cli/");
+    fs::create_dir_all(&log_dir).context("Failed to create log directory")?;
+
+    let log_file_path = log_dir.join("everest-mod-cli.log");
+    let log_file = File::create(&log_file_path).context("Failed to create log file")?;
+
+    // Determine the log level based on verbosity
+    let log_level = if verbose {
+        "everest_mod_cli=debug"
+    } else {
+        "everest_mod_cli=error"
     };
 
-    // Create a layer for ERROR level and above - no timestamp
-    let info_layer = fmt::layer()
-        .with_ansi(true)
-        .with_level(true)
-        .with_target(false)
-        .without_time()
-        .with_filter(LevelFilter::ERROR);
-
-    // Create a layer for DEBUG level - with module name, thread IDs, detailed file information
-    let debug_layer = fmt::layer()
-        .with_ansi(true)
-        .with_target(true)
-        .with_thread_ids(true)
+    // construct a subscriber that prints formatted traces to stdout
+    let subscriber = tracing_subscriber::fmt()
+        .compact()
+        .with_env_filter(log_level)
         .with_file(true)
         .with_line_number(true)
-        .with_filter(LevelFilter::DEBUG);
+        .with_thread_ids(true)
+        .with_target(false)
+        .with_writer(log_file)
+        .with_ansi(false)
+        .finish();
 
-    // Only register the debug layer if in verbose mode
-    if verbose {
-        tracing_subscriber::registry().with(debug_layer).init();
-    } else {
-        tracing_subscriber::registry().with(info_layer).init();
-    }
+    // Start configuring a `fmt` subscriber
+    tracing::subscriber::set_global_default(subscriber)?;
+
+    Ok(())
 }
 
 async fn run() -> Result<()> {
-    tracing::info!("Application starts");
-
     let cli = Cli::parse();
 
-    // Initialize the tracing subscriber for logging based on user flags.
-    setup_logging(cli.verbose);
+    setup_logger(cli.verbose)?;
 
+    tracing::info!("Application starts");
+
+    tracing::debug!("Passed CLI arguments: {:#?}", &cli);
     tracing::debug!("Command passed: {:?}", &cli.command);
 
     let config = Config::new(&cli)?;
 
     // Determine the mods directory.
     let mods_directory = config.directory();
-    tracing::debug!(
-        "Determined mods directory: {}",
+    tracing::info!(
+        "Using mods directory: '{}'",
         fileutil::replace_home_dir_with_tilde(mods_directory)
     );
+    tracing::info!("Mirror preference: {}", config.mirror_preferences());
 
     // Gathering mod paths
     let archive_paths = config.find_installed_mod_archives()?;
@@ -94,7 +100,8 @@ async fn run() -> Result<()> {
                 }
             });
 
-            println!("\n✅ {} mods found.", &local_mods.len());
+            println!();
+            println!("✅ {} mods found.", &local_mods.len());
         }
 
         // Show details of a specific mod if it is installed.
@@ -192,10 +199,12 @@ async fn run() -> Result<()> {
             if available_updates.is_empty() {
                 println!("All mods are up to date!");
             } else if args.install {
-                println!("\nInstalling updates...");
+                println!();
+                println!("Installing updates...");
                 download::download_mods_concurrently(&available_updates, config, 6).await?;
             } else {
-                println!("\nRun with --install to install these updates");
+                println!();
+                println!("Run with --install to install these updates");
             }
         }
     }

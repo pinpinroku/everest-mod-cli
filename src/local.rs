@@ -8,7 +8,7 @@ use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use zip_search::ZipSearcher;
 
-use crate::fileutil::{hash_file, replace_home_dir_with_tilde};
+use crate::fileutil;
 
 /// Represents the `everest.yaml` manifest file that defines a mod.
 #[derive(Debug, Default, Deserialize, Serialize, Clone, Hash, PartialEq, Eq)]
@@ -65,9 +65,15 @@ impl LocalMod {
     /// Returns an error if the file cannot be read.
     pub fn checksum(&self) -> Result<&str> {
         self.checksum
-            .get_or_try_init(|| {
-                let computed_hash = hash_file(&self.file_path)?;
-                Ok(computed_hash)
+            .get_or_try_init(|| match fileutil::hash_file(&self.file_path) {
+                Ok(it) => Ok(it),
+                Err(e) => {
+                    tracing::error!(
+                        "Could not open or read the file: {}",
+                        fileutil::replace_home_dir_with_tilde(&self.file_path)
+                    );
+                    anyhow::bail!("{}", e)
+                }
             })
             .map(|hash| hash.as_str())
     }
@@ -79,7 +85,7 @@ impl LocalMod {
     fn from_path(file_path: &Path) -> Result<Self> {
         const MANIFEST: &str = "everest.yaml";
 
-        let debug_filename = replace_home_dir_with_tilde(file_path);
+        let debug_filename = fileutil::replace_home_dir_with_tilde(file_path);
 
         // Find a manifest file in zip
         let mut zip_searcher = ZipSearcher::new(file_path)?;
@@ -119,6 +125,7 @@ impl LocalMod {
     pub fn load_local_mods(archive_paths: &[PathBuf]) -> Vec<Self> {
         use rayon::prelude::*;
 
+        tracing::info!("Found {} mod archives to load", archive_paths.len());
         tracing::info!("Start parsing archive files.");
         let mut local_mods: Vec<Self> = archive_paths
             .par_iter()
@@ -130,6 +137,7 @@ impl LocalMod {
                 }
             })
             .collect();
+        tracing::info!("Successfully loaded {} local mods", local_mods.len());
 
         tracing::info!("Sorting the installed mods by name...");
         local_mods.sort_by(|a, b| a.manifest.name.cmp(&b.manifest.name));

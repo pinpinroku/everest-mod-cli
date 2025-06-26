@@ -67,7 +67,7 @@ impl ModRegistryQuery for RemoteModRegistry {
     /// Returns a vector of tuples containing the mod name and its updated remote information.
     fn check_updates(self: Arc<Self>, local_mods: &[LocalMod]) -> Vec<(String, RemoteModInfo)> {
         use rayon::prelude::*;
-
+        tracing::info!("Checking for updates for {} local mods", local_mods.len());
         local_mods
             .par_iter()
             .filter_map(|local_mod| {
@@ -85,6 +85,7 @@ impl ModRegistryQuery for RemoteModRegistry {
                 if remote_mod.has_matching_hash(local_hash) {
                     None
                 } else {
+                    tracing::debug!("Mods with available updates: {:?}", name);
                     println!(
                         "Update available for '{}': {} -> {}",
                         name, local_mod.manifest.version, remote_mod.version

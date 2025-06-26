@@ -35,7 +35,7 @@ pub struct Cli {
     )]
     pub mirror_preferences: String,
 
-    /// Verbose mode: Display verbose outputs
+    /// Verbose mode: Write verbose logs to the file
     #[arg(short, long)]
     pub verbose: bool,
 

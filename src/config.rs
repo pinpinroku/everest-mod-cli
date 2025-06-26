@@ -97,7 +97,13 @@ impl Config {
         tracing::info!("Checking for the blacklisted mods...");
         let path = self.directory.join(UPDATER_BLACKLIST_FILE);
 
+        tracing::info!(
+            "Reading updater blacklist from '{}'",
+            fileutil::replace_home_dir_with_tilde(&path)
+        );
+
         if !path.exists() {
+            tracing::info!("The updater blacklist file does not exist.");
             return Ok(None);
         }
 
@@ -114,6 +120,8 @@ impl Config {
                         tracing::debug!("Skipping line {}: '{}'", line_number + 1, trimmed);
                         continue;
                     }
+                    tracing::info!("Blacklist entry: {:?}", trimmed);
+
                     // NOTE: It is easier to compare them as full paths.
                     filenames.insert(self.directory.join(trimmed));
                 }

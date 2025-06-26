@@ -16,7 +16,7 @@ where
 {
     let response = client.get(url).send().await?.error_for_status()?;
 
-    tracing::debug!("Response headers: {:#?}", response.headers());
+    tracing::info!("Fetched response status: {}", response.status());
     let bytes = response.bytes().await?;
 
     tracing::info!("Parsing the binary data from the response");
@@ -30,6 +30,8 @@ pub async fn fetch_online_database() -> Result<(
     HashMap<String, RemoteModInfo>,
     HashMap<String, ModDependency>,
 )> {
+    tracing::info!("Fetching mod registry and dependency graph from remote server...");
+
     let client = reqwest::ClientBuilder::new()
         .http2_prior_knowledge()
         .gzip(true)
@@ -41,5 +43,13 @@ pub async fn fetch_online_database() -> Result<(
         DependencyGraph::fetch(&client)
     )?;
     spinner.finish_and_clear();
+
+    tracing::info!("Successfully fetched mod registry and dependency graph");
+    tracing::debug!("Fetched mod registry with {} entries", mod_registry.len());
+    tracing::debug!(
+        "Fetched dependency graph with {} entries",
+        dependency_graph.len()
+    );
+
     Ok((mod_registry, dependency_graph))
 }
