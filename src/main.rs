@@ -2,7 +2,6 @@ use std::{env, fs, fs::File, sync::Arc};
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use rayon::iter::ParallelDrainFull;
 
 mod cli;
 mod config;
