@@ -41,7 +41,7 @@ pub type RemoteModRegistry = HashMap<String, RemoteModInfo>;
 
 pub trait ModRegistryQuery {
     async fn fetch(client: &Client) -> Result<RemoteModRegistry>;
-    fn get_mod_name_by_id(&self, mod_id: u32) -> Option<&String>;
+    fn get_mod_name_by_id(&self, mod_id: u32) -> Vec<&String>;
     fn check_updates(self: Arc<Self>, local_mods: &[LocalMod]) -> Vec<(String, RemoteModInfo)>;
 }
 
@@ -51,15 +51,18 @@ impl ModRegistryQuery for RemoteModRegistry {
         fetch::fetch_remote_data::<Self>(MOD_REGISTRY_URL, client).await
     }
 
-    /// Gets a mod name that matches the given mod ID.
-    fn get_mod_name_by_id(&self, mod_id: u32) -> Option<&String> {
+    /// Gets mod names that matches the given mod ID.
+    ///
+    /// Returns empty vector if no mod matches the ID.
+    fn get_mod_name_by_id(&self, mod_id: u32) -> Vec<&String> {
         debug!(
             "Looking up the remote mod information that matches the mod ID: {}",
             mod_id
         );
         self.iter()
-            .find(|(_, manifest)| manifest.gamebanana_id == mod_id)
+            .filter(|(_, manifest)| manifest.gamebanana_id == mod_id)
             .map(|(mod_name, _)| mod_name)
+            .collect()
     }
 
     /// Checks for updates of local mods.
@@ -134,10 +137,9 @@ mod tests {
         let mod_registry = dummy_registry();
 
         let result = mod_registry.get_mod_name_by_id(42);
-        assert!(result.is_some());
-        let found_key = result.unwrap();
-        assert_eq!(found_key, "SpeedrunTool");
+        assert!(!result.is_empty());
+        assert_eq!(result[0], "SpeedrunTool");
 
-        assert!(mod_registry.get_mod_name_by_id(12345).is_none());
+        assert!(mod_registry.get_mod_name_by_id(12345).is_empty());
     }
 }
