@@ -2,6 +2,7 @@ use std::{env, fs, fs::File, sync::Arc};
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use rayon::iter::ParallelDrainFull;
 
 mod cli;
 mod config;
@@ -153,9 +154,8 @@ async fn run() -> Result<()> {
                 return Ok(());
             };
 
+            let mut installed_mod_names = LocalMod::names(&archive_paths);
             for mod_name in mod_names {
-                let installed_mod_names = LocalMod::names(&archive_paths);
-
                 if installed_mod_names.contains(mod_name) {
                     println!("You already have [{}] installed.", mod_name);
                     continue;
@@ -177,6 +177,11 @@ async fn run() -> Result<()> {
 
                 println!("Downloading mod [{}] and its dependencies...", mod_name);
                 download::download_mods_concurrently(&downloadable_mods, config.clone(), 6).await?;
+
+                // Prevent duplicate downloads
+                for (mod_name, _) in downloadable_mods {
+                    installed_mod_names.insert(mod_name);
+                }
             }
         }
 
