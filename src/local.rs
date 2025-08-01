@@ -99,9 +99,7 @@ impl LocalMod {
 
                 // Parses the file
                 if let Some(manifest) = ModManifest::from_yaml(&buffer).with_context(|| {
-                    format!(
-                        "Failed to parse manifest file '{MANIFEST}' in '{debug_filename}'"
-                    )
+                    format!("Failed to parse manifest file '{MANIFEST}' in '{debug_filename}'")
                 })? {
                     Ok(Self {
                         file_path: file_path.to_path_buf(),

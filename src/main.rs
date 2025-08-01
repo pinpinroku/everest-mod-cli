@@ -167,9 +167,7 @@ async fn run() -> Result<()> {
                 );
 
                 if downloadable_mods.is_empty() {
-                    println!(
-                        "All dependencies for mod [{mod_name}] are already installed"
-                    );
+                    println!("All dependencies for mod [{mod_name}] are already installed");
                     continue;
                 }
 
