@@ -147,31 +147,37 @@ async fn run() -> Result<()> {
             let (mod_registry, dependency_graph) = fetch::fetch_online_database().await?;
 
             // Gets the mod name by using the ID from the Remote Mod Registry.
-            let mod_name = match mod_registry.get_mod_name_by_id(mod_id) {
-                Some(name) => name,
-                None => {
-                    println!("Could not find the mod matches [{}].", mod_id);
-                    return Ok(());
-                }
+            let mod_names = mod_registry.get_mod_name_by_id(mod_id);
+            if mod_names.is_empty() {
+                println!("Could not find the mod matches [{}].", mod_id);
+                return Ok(());
             };
 
-            let installed_mod_names = LocalMod::names(&archive_paths);
-            if installed_mod_names.contains(mod_name) {
-                println!("You already have [{}] installed.", mod_name);
-                return Ok(());
-            }
+            for mod_name in mod_names {
+                let installed_mod_names = LocalMod::names(&archive_paths);
 
-            let downloadable_mods =
-                dependency_graph.check_dependencies(mod_name, &mod_registry, &installed_mod_names);
-            if downloadable_mods.is_empty() {
-                println!(
-                    "All dependencies for mod [{}] are already installed",
-                    mod_name
+                if installed_mod_names.contains(mod_name) {
+                    println!("You already have [{}] installed.", mod_name);
+                    continue;
+                }
+
+                let downloadable_mods = dependency_graph.check_dependencies(
+                    mod_name,
+                    &mod_registry,
+                    &installed_mod_names,
                 );
-                return Ok(());
+
+                if downloadable_mods.is_empty() {
+                    println!(
+                        "All dependencies for mod [{}] are already installed",
+                        mod_name
+                    );
+                    continue;
+                }
+
+                println!("Downloading mod [{}] and its dependencies...", mod_name);
+                download::download_mods_concurrently(&downloadable_mods, config.clone(), 6).await?;
             }
-            println!("Downloading mod [{}] and its dependencies...", mod_name);
-            download::download_mods_concurrently(&downloadable_mods, config, 6).await?;
         }
 
         Commands::Update(args) => {
