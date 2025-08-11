@@ -191,7 +191,9 @@ async fn run() -> Result<()> {
             // Update installed mods by checking for available updates in the mod registry.
             let spinner = download::pb_style::create_spinner();
             let client = reqwest::ClientBuilder::new()
-                .http2_prior_knowledge()
+                .use_rustls_tls()
+                .https_only(true)
+                .http2_adaptive_window(true)
                 .gzip(true)
                 .build()
                 .unwrap_or_else(|_| reqwest::Client::new());

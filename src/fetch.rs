@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use reqwest::Client;
+use reqwest::{Client, Version};
 use serde::de::DeserializeOwned;
 
 use crate::{
@@ -14,7 +14,12 @@ pub async fn fetch_remote_data<T>(url: &str, client: &Client) -> Result<T>
 where
     T: DeserializeOwned,
 {
-    let response = client.get(url).send().await?.error_for_status()?;
+    let response = client
+        .get(url)
+        .version(Version::HTTP_2)
+        .send()
+        .await?
+        .error_for_status()?;
 
     tracing::info!("Fetched response status: {}", response.status());
     let bytes = response.bytes().await?;
@@ -33,7 +38,9 @@ pub async fn fetch_online_database() -> Result<(
     tracing::info!("Fetching mod registry and dependency graph from remote server...");
 
     let client = reqwest::ClientBuilder::new()
-        .http2_prior_knowledge()
+        .use_rustls_tls()
+        .https_only(true)
+        .http2_adaptive_window(true)
         .gzip(true)
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
