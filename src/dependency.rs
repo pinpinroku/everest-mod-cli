@@ -106,9 +106,9 @@ impl ModDependencyQuery for DependencyGraph {
         tracing::info!("Missing dependencies: {:?}", missing_deps);
 
         missing_deps
-            .iter()
+            .into_iter()
             .filter_map(|name| {
-                let name = (*name).clone();
+                let name = name.clone();
                 if let Some(remote_mod) = mod_registry.get(&name) {
                     tracing::info!(
                         "Dependency [{}] is available: {}",
