@@ -1,21 +1,22 @@
-use reqwest::Url;
 use thiserror::Error;
 
-#[derive(Debug, Error)]
+#[derive(Error, Debug)]
 pub enum ModPageUrlParseError {
-    /// Invalid URL
     #[error("invalid URL: {0}")]
     InvalidUrl(String),
 
-    /// Unsupported scheme
-    #[error("unsupported scheme: {0} (expected 'http' or 'https')")]
+    #[error("unsupported scheme in URL: {0}. Expected 'http' or 'https'")]
     UnsupportedScheme(String),
 
-    /// Invalid GameBanana URL
-    #[error("invalid GameBanana URL :{0:?}")]
-    InvalidGameBananaUrl(Url),
+    #[error("invalid GameBanana URL: {0}. Expected host 'gamebanana.com'")]
+    InvalidGameBananaUrl(String),
 
-    /// Invalid Mod ID
-    #[error("invalid Mod ID :{0} (expected unsigned 32 bit integer)")]
+    #[error("URL cannot be a base URL: {0}")]
+    CannotBeBaseUrl(String),
+
+    #[error("invalid path format in URL: {0}. Expected '/mods/<id>'")]
+    InvalidPathFormat(String),
+
+    #[error("invalid mod ID: {0}. Expected a positive integer")]
     InvalidModId(String),
 }

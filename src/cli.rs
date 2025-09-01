@@ -65,7 +65,7 @@ pub struct InstallArgs {
 }
 
 impl InstallArgs {
-    /// Parses the given url string, converts it to the mod ID.
+    /// Parses the given URL string, converts it to the mod ID.
     ///
     /// # Errors
     /// Returns an error if the URL is invalid, has an unsupported scheme,
@@ -76,34 +76,39 @@ impl InstallArgs {
             .map_err(|_| ModPageUrlParseError::InvalidUrl(page_url_str.to_owned()))?;
 
         // Check scheme
-        match page_url.scheme() {
-            "http" | "https" => {}
-            _ => {
-                return Err(ModPageUrlParseError::UnsupportedScheme(
-                    page_url_str.to_owned(),
-                ));
-            }
+        if !matches!(page_url.scheme(), "http" | "https") {
+            return Err(ModPageUrlParseError::UnsupportedScheme(
+                page_url_str.to_owned(),
+            ));
         }
 
         // Check host
         if page_url.host_str() != Some("gamebanana.com") {
-            return Err(ModPageUrlParseError::InvalidGameBananaUrl(page_url.clone()));
+            return Err(ModPageUrlParseError::InvalidGameBananaUrl(
+                page_url_str.to_owned(),
+            ));
         }
 
-        // Check path segments
-        let mut segments = page_url
+        // Split URL into segments
+        let segments = page_url
             .path_segments()
-            .ok_or_else(|| ModPageUrlParseError::InvalidGameBananaUrl(page_url.clone()))?;
+            .ok_or_else(|| ModPageUrlParseError::CannotBeBaseUrl(page_url_str.to_owned()))?;
 
-        // Expected path: /mods/12345
-        match (segments.next(), segments.next()) {
-            (Some("mods"), Some(id_str)) => {
+        let mut segments_iter = segments;
+        match (
+            segments_iter.next(),
+            segments_iter.next(),
+            segments_iter.next(),
+        ) {
+            (Some("mods"), Some(id_str), None) => {
                 let id = id_str
                     .parse::<u32>()
                     .map_err(|_| ModPageUrlParseError::InvalidModId(id_str.to_owned()))?;
                 Ok(id)
             }
-            _ => Err(ModPageUrlParseError::InvalidGameBananaUrl(page_url.clone())),
+            _ => Err(ModPageUrlParseError::InvalidPathFormat(
+                page_url_str.to_owned(),
+            )),
         }
     }
 }
@@ -163,6 +168,30 @@ mod tests_page_url {
     fn test_non_numeric_id() {
         let args = InstallArgs {
             mod_page_url: "https://gamebanana.com/mods/abc".to_string(),
+        };
+        assert!(args.parse_mod_page_url().is_err());
+    }
+
+    #[test]
+    fn test_extra_path_segments() {
+        let args = InstallArgs {
+            mod_page_url: "https://gamebanana.com/mods/12345/extra".to_string(),
+        };
+        assert!(args.parse_mod_page_url().is_err());
+    }
+
+    #[test]
+    fn test_no_path_segments() {
+        let args = InstallArgs {
+            mod_page_url: "https://gamebanana.com/".to_string(),
+        };
+        assert!(args.parse_mod_page_url().is_err());
+    }
+
+    #[test]
+    fn test_cannot_be_base_url() {
+        let args = InstallArgs {
+            mod_page_url: "mailto:gamebanana.com".to_string(),
         };
         assert!(args.parse_mod_page_url().is_err());
     }
