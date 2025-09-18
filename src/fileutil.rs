@@ -2,11 +2,10 @@ use std::{
     borrow::Cow,
     env,
     fs::File,
-    io::{BufReader, Read},
+    io::{self, BufReader, Read},
     path::Path,
 };
 
-use anyhow::{Context, Result};
 use xxhash_rust::xxh64::Xxh64;
 
 /// Replaces `/home/user/` with `~/`
@@ -25,18 +24,13 @@ pub fn replace_home_dir_with_tilde(destination: &Path) -> Cow<'_, str> {
 }
 
 /// Computes the xxhash of a given file and returns it as a hexadecimal string.
-///
-/// # Errors
-/// Returns an error if the file cannot be opened or read.
-pub fn hash_file(file_path: &Path) -> Result<String> {
+pub fn hash_file(file_path: &Path) -> io::Result<String> {
     let file = File::open(file_path)?;
     let mut reader = BufReader::new(file);
     let mut hasher = Xxh64::new(0);
     let mut buffer = [0u8; 64 * 1024]; // Read in 64 KB chunks
     loop {
-        let bytes_read = reader
-            .read(&mut buffer)
-            .context("failed to read the buffer")?;
+        let bytes_read = reader.read(&mut buffer)?;
         if bytes_read == 0 {
             break;
         }

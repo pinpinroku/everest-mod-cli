@@ -1,4 +1,9 @@
-use std::{env, fs, fs::File, sync::Arc};
+use std::{
+    collections::HashSet,
+    env,
+    fs::{self, File},
+    sync::Arc,
+};
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -88,7 +93,11 @@ async fn run() -> Result<()> {
                 return Ok(());
             }
 
-            let local_mods = LocalMod::load_local_mods(&archive_paths);
+            let mut local_mods = LocalMod::load_local_mods(&archive_paths);
+
+            // Sort mods by name before displaying.
+            tracing::info!("Sorting the installed mods by name.");
+            local_mods.sort_by(|a, b| a.manifest.name.cmp(&b.manifest.name));
 
             local_mods.iter().for_each(|local_mod| {
                 if let Some(os_str) = local_mod.location.file_name() {
@@ -102,6 +111,12 @@ async fn run() -> Result<()> {
 
             println!();
             println!("✅ {} mods found.", &local_mods.len());
+            if archive_paths.len() != local_mods.len() {
+                println!(
+                    "⚠️  {} mod archive(s) could not be read. Check the log file for details.",
+                    archive_paths.len() - local_mods.len()
+                );
+            }
         }
 
         // Show details of a specific mod if it is installed.
@@ -163,7 +178,11 @@ async fn run() -> Result<()> {
                         return Ok(());
                     };
 
-                    let mut installed_mod_names = LocalMod::names(&archive_paths);
+                    let local_mods = LocalMod::load_local_mods(&archive_paths);
+                    let mut installed_mod_names: HashSet<String> = local_mods
+                        .into_iter()
+                        .map(|installed| installed.manifest.name)
+                        .collect();
                     for mod_name in mod_names {
                         if installed_mod_names.contains(mod_name) {
                             println!("You already have [{mod_name}] installed.");
