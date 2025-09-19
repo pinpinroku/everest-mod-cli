@@ -7,13 +7,13 @@ use serde::{Deserialize, Serialize};
 use crate::{
     constant::MOD_DEPENDENCY_GRAPH,
     fetch,
-    local::Dependency,
+    manifest::Dependency,
     mod_registry::{RemoteModInfo, RemoteModRegistry},
 };
 
 /// Each entry of the `mod_dependency_graph.yaml`.
 #[derive(Debug, Default, Deserialize, Serialize, Clone, Hash, PartialEq, Eq)]
-pub struct ModDependency {
+pub struct DependencyInfo {
     #[serde(rename = "OptionalDependencies")]
     optional_dependencies: Vec<Dependency>,
     #[serde(rename = "Dependencies")]
@@ -23,12 +23,12 @@ pub struct ModDependency {
 }
 
 /// Represents `mod_dependency_graph.yaml` which is the dependency graph.
-pub type DependencyGraph = HashMap<String, ModDependency>;
+pub type DependencyGraph = HashMap<String, DependencyInfo>;
 
 /// A trait for querying mod dependencies.
 pub trait ModDependencyQuery {
     async fn fetch(client: &Client) -> Result<DependencyGraph>;
-    fn get_mod_info_by_name(&self, name: &str) -> Option<&ModDependency>;
+    fn get_mod_info_by_name(&self, name: &str) -> Option<&DependencyInfo>;
     fn collect_all_dependencies_bfs(&self, mod_name: &str) -> HashSet<String>;
     fn check_dependencies(
         &self,
@@ -45,7 +45,7 @@ impl ModDependencyQuery for DependencyGraph {
     }
 
     /// Gets a mod registry entry that matches the given name.
-    fn get_mod_info_by_name(&self, name: &str) -> Option<&ModDependency> {
+    fn get_mod_info_by_name(&self, name: &str) -> Option<&DependencyInfo> {
         tracing::debug!(
             "Getting the dependency information matching the name: {}",
             name
@@ -128,9 +128,8 @@ impl ModDependencyQuery for DependencyGraph {
 #[cfg(test)]
 mod tests_dependency {
     use super::*;
-    use crate::local::Dependency;
 
-    impl ModDependency {
+    impl DependencyInfo {
         pub fn new(dependencies: Vec<Dependency>) -> Self {
             Self {
                 dependencies,
@@ -152,14 +151,14 @@ mod tests_dependency {
         // A depends on B and C
         graph.insert(
             "A".to_string(),
-            ModDependency::new(vec![mock_dep("B"), mock_dep("C")]),
+            DependencyInfo::new(vec![mock_dep("B"), mock_dep("C")]),
         );
         // B depends on D
-        graph.insert("B".to_string(), ModDependency::new(vec![mock_dep("D")]));
+        graph.insert("B".to_string(), DependencyInfo::new(vec![mock_dep("D")]));
         // C has no dependencies
-        graph.insert("C".to_string(), ModDependency::new(vec![]));
+        graph.insert("C".to_string(), DependencyInfo::new(vec![]));
         // D has no dependencies
-        graph.insert("D".to_string(), ModDependency::new(vec![]));
+        graph.insert("D".to_string(), DependencyInfo::new(vec![]));
 
         graph
     }

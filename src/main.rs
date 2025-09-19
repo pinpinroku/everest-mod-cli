@@ -16,14 +16,16 @@ mod download;
 mod error;
 mod fetch;
 mod fileutil;
-mod local;
+mod local_mod;
+mod manifest;
 mod mod_registry;
+mod zip;
 
 use crate::{
     cli::{Cli, Commands},
     config::Config,
     dependency::ModDependencyQuery,
-    local::LocalMod,
+    local_mod::LocalMod,
     mod_registry::{ModRegistryQuery, RemoteModRegistry},
 };
 
@@ -84,6 +86,9 @@ async fn run() -> Result<()> {
 
     // Gathering mod paths
     let archive_paths = config.find_installed_mod_archives()?;
+
+    // FIXME: local mods can be loaded here for further operations
+    // let local_mods = LocalMod::load_local_mods(&archive_paths);
 
     match &cli.command {
         // Show mod name and file name of installed mods.

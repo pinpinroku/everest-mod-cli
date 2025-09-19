@@ -5,7 +5,7 @@ use reqwest::Client;
 use serde::de::DeserializeOwned;
 
 use crate::{
-    dependency::{DependencyGraph, ModDependency, ModDependencyQuery},
+    dependency::{DependencyGraph, DependencyInfo, ModDependencyQuery},
     mod_registry::{ModRegistryQuery, RemoteModInfo, RemoteModRegistry},
 };
 
@@ -28,7 +28,7 @@ where
 /// Fetches online database.
 pub async fn fetch_online_database() -> Result<(
     HashMap<String, RemoteModInfo>,
-    HashMap<String, ModDependency>,
+    HashMap<String, DependencyInfo>,
 )> {
     tracing::info!("Fetching mod registry and dependency graph from remote server...");
 
