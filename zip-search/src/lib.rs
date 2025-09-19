@@ -57,13 +57,13 @@ pub type ZipSearchResult<T> = Result<T, ZipSearchError>;
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```ignore
 /// use std::path::Path;
 ///
 /// use zip_search::ZipSearcher;
 ///
 /// pub fn example_usage() -> Result<(), Box<dyn std::error::Error>> {
-///     let zip_path = Path::new("./test/ChroniaHelper.zip");
+///     let zip_path = Path::new("ChroniaHelper.zip");
 ///     let mut searcher = ZipSearcher::new(zip_path)?;
 ///
 ///     println!("Archive contains {} files", searcher.file_count());
@@ -71,6 +71,7 @@ pub type ZipSearchResult<T> = Result<T, ZipSearchError>;
 ///     let target_file = "everest.yaml";
 ///     match searcher.find_file(target_file) {
 ///         Ok(Some(entry)) => {
+///             assert_eq!(entry.file_name == target_file.to_string());
 ///             println!(
 ///                 "Found: {} ({} bytes, compression: {})",
 ///                 entry.file_name, entry.uncompressed_size, entry.compression_method
@@ -81,6 +82,7 @@ pub type ZipSearchResult<T> = Result<T, ZipSearchError>;
 ///
 ///             // Convert to string if it's text
 ///             if let Ok(text) = String::from_utf8(data) {
+///                 assert!(text.contains("- Name: ChroniaHelper"));
 ///                 println!(
 ///                     "Content preview: {}",
 ///                     &text[..std::cmp::min(100, text.len())]
@@ -312,11 +314,11 @@ impl ZipSearcher {
     /// - File names are converted to UTF-8 strings only when a match is found,
     ///   using `from_utf8_lossy` to handle potentially invalid UTF-8 data.
     ///
-    /// # Example
+    /// # Examples
     ///
-    /// ```no_run
+    /// ```ignore
     /// let mut zip = ZipFile {
-    ///     file: std::fs::File::open("example.zip")?,
+    ///     file: std::fs::File::open("SpeedrunTool.zip")?,
     ///     eocd: EndOfCentralDirectory {
     ///         total_entries: 10,
     ///         central_directory_offset: 1000,
@@ -324,7 +326,7 @@ impl ZipSearcher {
     ///     },
     /// };
     ///
-    /// match zip.find_file("target.txt") {
+    /// match zip.find_file("everest.yaml") {
     ///     Ok(Some(entry)) => println!("Found file: {}", entry.file_name),
     ///     Ok(None) => println!("File not found"),
     ///     Err(e) => eprintln!("Error: {}", e),

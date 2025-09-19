@@ -121,6 +121,7 @@ async fn download_and_write(
 /// Downloads mods concurrently with a limit on the number of concurrent downloads.
 ///
 /// # Errors
+///
 /// Returns an error if any of the downloads fail or if there are issues with the tasks.
 pub async fn download_mods_concurrently(
     client: &Client,
