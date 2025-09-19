@@ -103,21 +103,17 @@ impl ModDependencyQuery for DependencyGraph {
             .difference(installed_mod_names)
             .collect::<Vec<_>>();
 
-        tracing::info!("Missing dependencies: {:?}", missing_deps);
+        tracing::info!("Missing mods: {:?}", missing_deps);
 
         missing_deps
             .into_iter()
             .filter_map(|name| {
                 let name = name.clone();
                 if let Some(remote_mod) = mod_registry.get(&name) {
-                    tracing::info!(
-                        "Dependency [{}] is available: {}",
-                        name,
-                        remote_mod.download_url
-                    );
+                    tracing::info!("Mod [{}] is available: {}", name, remote_mod.download_url);
                     Some((name, remote_mod.to_owned()))
                 } else {
-                    tracing::warn!("Dependency [{}] is not available in the registry", name);
+                    tracing::warn!("Mod [{}] is not available in the registry", name);
                     None
                 }
             })

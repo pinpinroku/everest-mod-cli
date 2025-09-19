@@ -74,7 +74,7 @@ async fn download_and_write(
     let mut stream = response.bytes_stream();
     let mut hasher = Xxh64::new(0);
 
-    tracing::info!("Verifying checksum for {}", debug_filename);
+    tracing::info!("Verifying checksum for '{}'", debug_filename);
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
         temp_file.write_all(&chunk)?;
@@ -86,7 +86,7 @@ async fn download_and_write(
 
     tracing::debug!("computed hash: {:?}", hash_str,);
     tracing::debug!("expected hash: {:?}", expected_hashes);
-    tracing::info!("Checksum verification passed for {}", debug_filename);
+    tracing::info!("Checksum verification passed for '{}'", debug_filename);
 
     if !expected_hashes.contains(&hash_str) {
         anyhow::bail!(
@@ -99,15 +99,15 @@ async fn download_and_write(
         // or when the program exits. So we don't need to remove it manually.
     }
 
-    tracing::info!("Checksum verified");
+    tracing::info!("Checksum verified.");
 
     if install_destination.exists() {
         tracing::debug!(
-            "'{}' is already exists. Trying to remove it",
+            "'{}' is already exists. Trying to remove it.",
             debug_filename
         );
         fs::remove_file(install_destination)?;
-        tracing::info!("The previous version has been deleted");
+        tracing::info!("The previous version has been deleted.");
     }
 
     // NOTE: The permissions are set to 0600 because of copy operation.
@@ -192,7 +192,7 @@ pub async fn download_mods_concurrently(
     }
 
     if errors.is_empty() {
-        tracing::info!("Successfully download the mods")
+        tracing::info!("Successfully download the mods.")
     } else {
         for (i, error) in errors.iter().enumerate() {
             tracing::error!("Error {}: {}", i + 1, error)

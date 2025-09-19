@@ -15,11 +15,9 @@ where
     T: DeserializeOwned,
 {
     let response = client.get(url).send().await?.error_for_status()?;
+    tracing::info!("'{}' -> Status: {}", url, response.status());
 
-    tracing::info!("Fetched response status: {}", response.status());
     let bytes = response.bytes().await?;
-
-    tracing::info!("Parsing the binary data from the response");
     let data = serde_yaml_ng::from_slice::<T>(&bytes)?;
 
     Ok(data)
