@@ -26,23 +26,17 @@ where
 }
 
 /// Fetches online database.
-pub async fn fetch_online_database() -> Result<(
+pub async fn fetch_online_database(
+    client: &Client,
+) -> Result<(
     HashMap<String, RemoteModInfo>,
     HashMap<String, DependencyInfo>,
 )> {
     tracing::info!("Fetching mod registry and dependency graph from remote server...");
-
-    let client = reqwest::ClientBuilder::new()
-        .use_rustls_tls()
-        .https_only(true)
-        .http2_adaptive_window(true)
-        .gzip(true)
-        .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
     let spinner = crate::download::pb_style::create_spinner();
     let (mod_registry, dependency_graph) = tokio::try_join!(
-        RemoteModRegistry::fetch(&client),
-        DependencyGraph::fetch(&client)
+        RemoteModRegistry::fetch(client),
+        DependencyGraph::fetch(client)
     )?;
     spinner.finish_and_clear();
 

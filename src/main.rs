@@ -87,8 +87,7 @@ async fn run() -> Result<()> {
     // Gathering mod paths
     let archive_paths = config.find_installed_mod_archives()?;
 
-    // FIXME: local mods can be loaded here for further operations
-    // let local_mods = LocalMod::load_local_mods(&archive_paths);
+    let mut local_mods = LocalMod::load_local_mods(&archive_paths);
 
     match &cli.command {
         // Show mod name and file name of installed mods.
@@ -98,12 +97,11 @@ async fn run() -> Result<()> {
                 return Ok(());
             }
 
-            let mut local_mods = LocalMod::load_local_mods(&archive_paths);
-
             // Sort mods by name before displaying.
             tracing::info!("Sorting the installed mods by name.");
             local_mods.sort_by(|a, b| a.manifest.name.cmp(&b.manifest.name));
 
+            tracing::info!("Listing installed mods.");
             local_mods.iter().for_each(|local_mod| {
                 if let Some(os_str) = local_mod.location.file_name() {
                     println!(
@@ -127,9 +125,6 @@ async fn run() -> Result<()> {
         // Show details of a specific mod if it is installed.
         Commands::Show(args) => {
             tracing::info!("Checking installed mod information...");
-
-            let local_mods = LocalMod::load_local_mods(&archive_paths);
-
             if let Some(local_mod) = local_mods.iter().find(|m| m.manifest.name == args.name) {
                 println!(
                     "📂 {}",
@@ -162,19 +157,20 @@ async fn run() -> Result<()> {
 
         Commands::Install(_) | Commands::Update(_) => {
             let semaphore = Arc::new(tokio::sync::Semaphore::new(6));
-            let download_client = reqwest::ClientBuilder::new()
+            let client = reqwest::ClientBuilder::new()
                 .use_rustls_tls()
                 .https_only(true)
-                .http2_adaptive_window(true)
+                .gzip(true)
                 .build()
-                .unwrap_or_else(|_| reqwest::Client::new());
+                .unwrap_or_default();
 
             match &cli.command {
                 // Install a mod by fetching its information from the mod registry.
                 Commands::Install(args) => {
                     let mod_id = args.parse_mod_page_url()?;
                     // Fetching online database
-                    let (mod_registry, dependency_graph) = fetch::fetch_online_database().await?;
+                    let (mod_registry, dependency_graph) =
+                        fetch::fetch_online_database(&client).await?;
 
                     // Gets the mod name by using the ID from the Remote Mod Registry.
                     let mod_names = mod_registry.get_mod_name_by_id(mod_id);
@@ -182,12 +178,15 @@ async fn run() -> Result<()> {
                         println!("Could not find the mod matches [{mod_id}].");
                         return Ok(());
                     };
+                    tracing::info!("Mod names found for ID [{mod_id}]: {:#?}", &mod_names);
 
-                    let local_mods = LocalMod::load_local_mods(&archive_paths);
+                    tracing::info!("Collecting installed mods names.");
                     let mut installed_mod_names: HashSet<String> = local_mods
                         .into_iter()
                         .map(|installed| installed.manifest.name)
                         .collect();
+
+                    tracing::info!("Starting installation process.");
                     for mod_name in mod_names {
                         if installed_mod_names.contains(mod_name) {
                             println!("You already have [{mod_name}] installed.");
@@ -207,7 +206,7 @@ async fn run() -> Result<()> {
 
                         println!("Downloading mod [{mod_name}] and its dependencies...");
                         download::download_mods_concurrently(
-                            &download_client,
+                            &client,
                             &downloadable_mods,
                             config.clone(),
                             &semaphore,
@@ -222,21 +221,14 @@ async fn run() -> Result<()> {
                 }
                 Commands::Update(args) => {
                     // Filter installed mods according to the `updaterblacklist.txt`
-                    let mut local_mods = LocalMod::load_local_mods(&archive_paths);
-                    if let Some(blacklist) = config.read_updater_blacklist()? {
-                        local_mods.retain(|local_mod| !blacklist.contains(&local_mod.location));
+                    if let Some(updater_blacklist) = config.read_updater_blacklist()? {
+                        local_mods
+                            .retain(|local_mod| !updater_blacklist.contains(&local_mod.location));
                     }
 
                     // Update installed mods by checking for available updates in the mod registry.
                     let spinner = download::pb_style::create_spinner();
-                    let api_client = reqwest::ClientBuilder::new()
-                        .use_rustls_tls()
-                        .https_only(true)
-                        .http2_adaptive_window(true)
-                        .gzip(true)
-                        .build()
-                        .unwrap_or_else(|_| reqwest::Client::new());
-                    let mod_registry = RemoteModRegistry::fetch(&api_client).await?;
+                    let mod_registry = RemoteModRegistry::fetch(&client).await?;
                     spinner.finish_and_clear();
                     drop(spinner);
 
@@ -250,7 +242,7 @@ async fn run() -> Result<()> {
                         println!();
                         println!("Installing updates...");
                         download::download_mods_concurrently(
-                            &download_client,
+                            &client,
                             &available_updates,
                             config,
                             &semaphore,
