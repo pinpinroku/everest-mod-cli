@@ -68,6 +68,7 @@ impl InstallArgs {
     /// Parses the given URL string, converts it to the mod ID.
     ///
     /// # Errors
+    ///
     /// Returns an error if the URL is invalid, has an unsupported scheme,
     /// or does not match the expected GameBanana mod page format.
     pub fn parse_mod_page_url(&self) -> Result<u32, ModPageUrlParseError> {

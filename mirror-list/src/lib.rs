@@ -10,9 +10,10 @@ use std::borrow::Cow;
 /// - https://github.com/maddie480/RandomStuffWebsite/blob/main/front-vue/src/components/ModListItem.vue :: getMirrorLink
 ///
 ///
-/// # Example
-/// ```rust
-/// use get_all_mirrors::get_all_mirror_urls;
+/// # Examples
+///
+/// ```
+/// use mirror_list::get_all_mirror_urls;
 ///
 /// for url in get_all_mirror_urls("https://gamebanana.com/dl/12345", "jade,gb") {
 ///     println!("{}", url);

@@ -5,7 +5,7 @@ use reqwest::Client;
 use serde::de::DeserializeOwned;
 
 use crate::{
-    dependency::{DependencyGraph, ModDependency, ModDependencyQuery},
+    dependency::{DependencyGraph, DependencyInfo, ModDependencyQuery},
     mod_registry::{ModRegistryQuery, RemoteModInfo, RemoteModRegistry},
 };
 
@@ -15,34 +15,26 @@ where
     T: DeserializeOwned,
 {
     let response = client.get(url).send().await?.error_for_status()?;
+    tracing::info!("'{}' -> Status: {}", url, response.status());
 
-    tracing::info!("Fetched response status: {}", response.status());
     let bytes = response.bytes().await?;
-
-    tracing::info!("Parsing the binary data from the response");
     let data = serde_yaml_ng::from_slice::<T>(&bytes)?;
 
     Ok(data)
 }
 
 /// Fetches online database.
-pub async fn fetch_online_database() -> Result<(
+pub async fn fetch_online_database(
+    client: &Client,
+) -> Result<(
     HashMap<String, RemoteModInfo>,
-    HashMap<String, ModDependency>,
+    HashMap<String, DependencyInfo>,
 )> {
     tracing::info!("Fetching mod registry and dependency graph from remote server...");
-
-    let client = reqwest::ClientBuilder::new()
-        .use_rustls_tls()
-        .https_only(true)
-        .http2_adaptive_window(true)
-        .gzip(true)
-        .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
     let spinner = crate::download::pb_style::create_spinner();
     let (mod_registry, dependency_graph) = tokio::try_join!(
-        RemoteModRegistry::fetch(&client),
-        DependencyGraph::fetch(&client)
+        RemoteModRegistry::fetch(client),
+        DependencyGraph::fetch(client)
     )?;
     spinner.finish_and_clear();
 

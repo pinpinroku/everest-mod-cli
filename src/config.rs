@@ -30,6 +30,7 @@ impl Config {
     /// If the directory field is `None`, it will fall back to the default.
     ///
     /// # Errors
+    ///
     /// If the user's home directory could not be determined, an error is returned.
     pub fn new(cli: &Cli) -> Result<Arc<Self>> {
         let directory = cli
@@ -60,6 +61,7 @@ impl Config {
     /// Scans the mods directory and returns a list of all installed mod archive files.
     ///
     /// # Errors
+    ///
     /// If the mods directory does not exist or cannot be read, an error is returned.
     pub fn find_installed_mod_archives(&self) -> Result<Vec<PathBuf>> {
         let debug_filename = fileutil::replace_home_dir_with_tilde(&self.directory);
@@ -92,6 +94,7 @@ impl Config {
     /// Returns `None` if the file is not found in the given mods directory.
     ///
     /// # Errors
+    ///
     /// Returns an error if the file cannot be opened.
     pub fn read_updater_blacklist(&self) -> Result<Option<HashSet<PathBuf>>> {
         tracing::info!("Checking for the blacklisted mods...");
