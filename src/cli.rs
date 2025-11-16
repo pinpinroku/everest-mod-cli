@@ -1,9 +1,6 @@
-use std::path::PathBuf;
+use std::{num::ParseIntError, path::PathBuf};
 
 use clap::{Args, Parser, Subcommand};
-use reqwest::Url;
-
-use crate::error::ModPageUrlParseError;
 
 /// The main CLI structure for the Everest Mod CLI application
 #[derive(Debug, Parser)]
@@ -64,56 +61,6 @@ pub struct InstallArgs {
     pub mod_page_url: String,
 }
 
-impl InstallArgs {
-    /// Parses the given URL string, converts it to the mod ID.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the URL is invalid, has an unsupported scheme,
-    /// or does not match the expected GameBanana mod page format.
-    pub fn parse_mod_page_url(&self) -> Result<u32, ModPageUrlParseError> {
-        let page_url_str = &self.mod_page_url;
-        let page_url = Url::parse(page_url_str)
-            .map_err(|_| ModPageUrlParseError::InvalidUrl(page_url_str.to_owned()))?;
-
-        // Check scheme
-        if !matches!(page_url.scheme(), "http" | "https") {
-            return Err(ModPageUrlParseError::UnsupportedScheme(
-                page_url_str.to_owned(),
-            ));
-        }
-
-        // Check host
-        if page_url.host_str() != Some("gamebanana.com") {
-            return Err(ModPageUrlParseError::InvalidGameBananaUrl(
-                page_url_str.to_owned(),
-            ));
-        }
-
-        // Split URL into segments
-        let segments = page_url
-            .path_segments()
-            .ok_or_else(|| ModPageUrlParseError::CannotBeBaseUrl(page_url_str.to_owned()))?;
-
-        let mut segments_iter = segments;
-        match (
-            segments_iter.next(),
-            segments_iter.next(),
-            segments_iter.next(),
-        ) {
-            (Some("mods"), Some(id_str), None) => {
-                let id = id_str
-                    .parse::<u32>()
-                    .map_err(|_| ModPageUrlParseError::InvalidModId(id_str.to_owned()))?;
-                Ok(id)
-            }
-            _ => Err(ModPageUrlParseError::InvalidPathFormat(
-                page_url_str.to_owned(),
-            )),
-        }
-    }
-}
-
 /// Arguments for the `show` subcommand
 #[derive(Debug, Args)]
 pub struct ShowArgs {
@@ -129,71 +76,148 @@ pub struct UpdateArgs {
     pub install: bool,
 }
 
+/// A valid prefix for the mod page URL
+const VALID_MOD_PAGE_URL_PREFIX: &str = "https://gamebanana.com/mods/";
+
+/// An error can be occured when trying to extract an ID from an URL
+#[derive(thiserror::Error, Debug, PartialEq, Eq)]
+pub enum IdExtractionError {
+    #[error("'{url}' does not have valid prefix (expected: '{VALID_MOD_PAGE_URL_PREFIX}')")]
+    InvalidPrefix { url: String },
+    #[error("no valid ID segment in given URL")]
+    NoIdSegment,
+}
+
+/// Extracts an ID segment from given URL string.
+pub fn extract_id(url: &str) -> Result<&str, IdExtractionError> {
+    let id_str = url.strip_prefix(VALID_MOD_PAGE_URL_PREFIX);
+    match id_str {
+        Some(id) if !id.is_empty() => Ok(id),
+        Some(_) => Err(IdExtractionError::NoIdSegment),
+        None => Err(IdExtractionError::InvalidPrefix {
+            url: url.to_string(),
+        }),
+    }
+}
+
+/// Parses given string into an integer.
+pub fn parse_id(id_str: &str) -> Result<u32, ParseIntError> {
+    id_str
+        .parse::<u32>()
+        .inspect(|id| tracing::info!("parsed id: {}", id))
+        .inspect_err(|err| tracing::error!("failed to parse '{}' cause: {}", id_str, err))
+}
+
 #[cfg(test)]
-mod tests_page_url {
+mod tests_id_extraction {
     use super::*;
 
     #[test]
-    fn test_valid_url() {
-        let args = InstallArgs {
-            mod_page_url: "https://gamebanana.com/mods/12345".to_string(),
-        };
-        assert_eq!(args.parse_mod_page_url().unwrap(), 12345);
+    fn test_extract_id_valid_numeric() {
+        let url = "https://gamebanana.com/mods/123456";
+        assert_eq!(extract_id(url).unwrap(), "123456");
     }
 
     #[test]
-    fn test_invalid_scheme() {
-        let args = InstallArgs {
-            mod_page_url: "ftp://gamebanana.com/mods/12345".to_string(),
-        };
-        assert!(args.parse_mod_page_url().is_err());
+    fn test_extract_id_valid_with_trailing_path() {
+        let url = "https://gamebanana.com/mods/123456/download";
+        assert_eq!(extract_id(url).unwrap(), "123456/download");
     }
 
     #[test]
-    fn test_invalid_host() {
-        let args = InstallArgs {
-            mod_page_url: "https://example.com/mods/12345".to_string(),
-        };
-        assert!(args.parse_mod_page_url().is_err());
+    fn test_extract_id_valid_with_query_params() {
+        let url = "https://gamebanana.com/mods/123456?tab=comments";
+        assert_eq!(extract_id(url).unwrap(), "123456?tab=comments");
     }
 
     #[test]
-    fn test_missing_id() {
-        let args = InstallArgs {
-            mod_page_url: "https://gamebanana.com/mods/".to_string(),
-        };
-        assert!(args.parse_mod_page_url().is_err());
+    fn test_extract_id_valid_alphanumeric() {
+        let url = "https://gamebanana.com/mods/abc123def";
+        assert_eq!(extract_id(url).unwrap(), "abc123def");
     }
 
     #[test]
-    fn test_non_numeric_id() {
-        let args = InstallArgs {
-            mod_page_url: "https://gamebanana.com/mods/abc".to_string(),
-        };
-        assert!(args.parse_mod_page_url().is_err());
+    fn test_extract_id_empty_id_segment() {
+        let url = "https://gamebanana.com/mods/";
+        let result = extract_id(url);
+        assert_eq!(result, Err(IdExtractionError::NoIdSegment));
     }
 
     #[test]
-    fn test_extra_path_segments() {
-        let args = InstallArgs {
-            mod_page_url: "https://gamebanana.com/mods/12345/extra".to_string(),
-        };
-        assert!(args.parse_mod_page_url().is_err());
+    fn test_extract_id_invalid_prefix_different_domain() {
+        let url = "https://example.com/mods/123456";
+        let result = extract_id(url);
+        assert_eq!(
+            result,
+            Err(IdExtractionError::InvalidPrefix {
+                url: url.to_string()
+            })
+        );
     }
 
     #[test]
-    fn test_no_path_segments() {
-        let args = InstallArgs {
-            mod_page_url: "https://gamebanana.com/".to_string(),
-        };
-        assert!(args.parse_mod_page_url().is_err());
+    fn test_extract_id_invalid_prefix_different_path() {
+        let url = "https://gamebanana.com/mmdl/123456";
+        let result = extract_id(url);
+        assert_eq!(
+            result,
+            Err(IdExtractionError::InvalidPrefix {
+                url: url.to_string()
+            })
+        );
     }
 
     #[test]
-    fn test_cannot_be_base_url() {
-        let args = InstallArgs {
-            mod_page_url: "mailto:gamebanana.com".to_string(),
-        };
-        assert!(args.parse_mod_page_url().is_err());
+    fn test_extract_id_invalid_prefix_missing_trailing_slash() {
+        let url = "https://gamebanana.com/mods123456";
+        let result = extract_id(url);
+        assert_eq!(
+            result,
+            Err(IdExtractionError::InvalidPrefix {
+                url: url.to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn test_extract_id_invalid_prefix_http_instead_of_https() {
+        let url = "http://gamebanana.com/mods/123456";
+        let result = extract_id(url);
+        assert_eq!(
+            result,
+            Err(IdExtractionError::InvalidPrefix {
+                url: url.to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn test_extract_id_invalid_prefix_with_subdomain() {
+        let url = "https://www.gamebanana.com/mods/123456";
+        let result = extract_id(url);
+        assert_eq!(
+            result,
+            Err(IdExtractionError::InvalidPrefix {
+                url: url.to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn test_extract_id_empty_string() {
+        let url = "";
+        let result = extract_id(url);
+        assert_eq!(
+            result,
+            Err(IdExtractionError::InvalidPrefix {
+                url: url.to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn test_extract_id_valid_with_fragment() {
+        let url = "https://gamebanana.com/mods/123456#description";
+        assert_eq!(extract_id(url).unwrap(), "123456#description");
     }
 }
