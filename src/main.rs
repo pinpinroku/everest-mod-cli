@@ -13,7 +13,6 @@ mod config;
 mod constant;
 mod dependency;
 mod download;
-mod error;
 mod fetch;
 mod fileutil;
 mod local_mod;
@@ -167,7 +166,9 @@ async fn run() -> Result<()> {
             match &cli.command {
                 // Install a mod by fetching its information from the mod registry.
                 Commands::Install(args) => {
-                    let mod_id = args.parse_mod_page_url()?;
+                    let id_str = cli::extract_id(&args.mod_page_url)?;
+                    let mod_id = cli::parse_id(id_str)?;
+
                     // Fetching online database
                     let (mod_registry, dependency_graph) =
                         fetch::fetch_online_database(&client).await?;
@@ -265,7 +266,8 @@ async fn run() -> Result<()> {
 async fn main() {
     if let Err(err) = run().await {
         tracing::error!("{:#?}", err);
-        eprintln!("Failed to run the command.");
+        eprintln!("Failed to run the command: cause {}", err);
+    } else {
+        tracing::info!("Command completed successfully.");
     }
-    tracing::info!("Command completed successfully.");
 }
