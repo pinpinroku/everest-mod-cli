@@ -106,11 +106,41 @@ impl RemoteMod {
 mod tests_registry {
     use super::*;
 
-    use std::fs;
+    const YAML_BYTES: &[u8; 666] = br#"
+CSRC Frog:
+  GameBananaType: Tool
+  Version: 1.0.1
+  LastUpdate: 1728796397
+  Size: 508
+  GameBananaId: 15836
+  GameBananaFileId: 1298450
+  xxHash:
+  - f437bf0515368130
+  URL: https://gamebanana.com/mmdl/1298450
+puppyposting:
+  GameBananaType: Mod
+  Version: 1.1.0
+  LastUpdate: 1758235322
+  Size: 13937408
+  GameBananaId: 619550
+  GameBananaFileId: 1520739
+  xxHash:
+  - 7f4d96733b93c52c
+  URL: https://gamebanana.com/mmdl/1520739
+viewpoint-dreampoint-point:
+  GameBananaType: Mod
+  Version: '1.0'
+  LastUpdate: 1721585539
+  Size: 7196727
+  GameBananaId: 529652
+  GameBananaFileId: 1241237
+  xxHash:
+  - 5aaf7ee3550f2d70
+  URL: https://gamebanana.com/mmdl/1241237
+"#;
 
-    fn load_registry_from_yaml(path: &str) -> ModRegistry {
-        let bytes = fs::read(path).expect("test file should be read");
-        let mods = serde_yaml_ng::from_slice(&bytes).expect("YAML format should be parsed");
+    fn load_registry_from_yaml() -> ModRegistry {
+        let mods = serde_yaml_ng::from_slice(YAML_BYTES).expect("YAML format should be parsed");
         ModRegistry::new(mods)
     }
 
@@ -118,14 +148,14 @@ mod tests_registry {
     fn test_mod_registry_new_and_inverted_index() {
         let mut mods = HashMap::new();
         mods.insert(
-            "ModA".to_string(),
+            "SpeedrunTool".to_string(),
             RemoteMod {
                 gamebanana_id: 42,
                 ..Default::default()
             },
         );
         mods.insert(
-            "ModB".to_string(),
+            "SkinModHelper".to_string(),
             RemoteMod {
                 gamebanana_id: 42,
                 ..Default::default()
@@ -137,40 +167,26 @@ mod tests_registry {
             registry
                 .id_to_names
                 .get(&42)
-                .is_some_and(|id| id.len() == 2)
-        );
-        assert!(
-            registry
-                .id_to_names
-                .get(&42)
-                .is_some_and(|v| v.contains(&"ModA".to_string()))
-        );
-        assert!(
-            registry
-                .id_to_names
-                .get(&42)
-                .is_some_and(|v| v.contains(&"ModB".to_string()))
+                .is_some_and(|value| value.len() == 2
+                    && value.contains(&"SpeedrunTool".to_string())
+                    && value.contains(&"SkinModHelper".to_string()))
         );
     }
 
     #[test]
     fn test_mod_registry_from_slice_and_mods() {
-        let registry = load_registry_from_yaml("./tests/everest_update.yaml");
+        let registry = load_registry_from_yaml();
         let mods = registry.mods;
-        assert!(!mods.is_empty());
-        // Check that at least one mod has expected fields
-        assert!(
-            mods.iter()
-                .next()
-                .is_some_and(|(_name, mod_info)| !mod_info.version.is_empty()
-                    && !mod_info.download_url.is_empty())
-        );
+        let target = mods.get("puppyposting");
+        assert!(target.is_some_and(|mod_info| {
+            mod_info.gamebanana_id == 619550
+                && mod_info.download_url == "https://gamebanana.com/mmdl/1520739"
+        }));
     }
 
     #[test]
     fn test_get_mod_names_by_id() {
-        let registry = load_registry_from_yaml("./tests/everest_update.yaml");
-        // Pick a known ID from the test file
+        let registry = load_registry_from_yaml();
         let known_id = registry.id_to_names.keys().next().cloned().unwrap();
         let names_opt = registry.get_names_by_ids(&[known_id]);
         assert!(!names_opt.is_empty());
