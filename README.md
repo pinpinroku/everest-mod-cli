@@ -124,6 +124,7 @@ Limit concurrent downloads by specifying number from 1 to 6. Default to 4.
 ## Technical Details
 
 **Memory Usage & Privacy**
+
 By default, this tool buffers downloads in memory to ensure:
 1. **Performance:** Avoiding slow I/O overhead on filesystems, especially when `tmpfs` and `zram` are available.
 2. **Security/Privacy:** Minimizing the trace of sensitive data on physical storage.
@@ -134,12 +135,12 @@ In the worst-case scenario (specific file combinations; especially audio files),
 
 The following mods contain large assets that significantly increase memory pressure:
 
-* **Breeze Contest (Audio):** ~707 MB
-* **The Celeste Parable:** ~523 MB
-* **Spring Collab 2020 (Audio):** ~513 MB
-* **Secret Santa Collab 2023 (Audio):** ~489 MB
-* **Strawberry Jam (Audio):** 3 files, ~300 MB each
-* **Secret Santa Collab 2024 (Audio):** 3 files, 450 MB + 350 MB (x2)
+- **Breeze Contest (Audio):** ~707 MB
+- **The Celeste Parable:** ~523 MB
+- **Spring Collab 2020 (Audio):** ~513 MB
+- **Secret Santa Collab 2023 (Audio):** ~489 MB
+- **Strawberry Jam (Audio):** 3 files, ~300 MB each
+- **Secret Santa Collab 2024 (Audio):** 3 files, 450 MB + 350 MB (x2)
 
 ---
 
@@ -148,11 +149,11 @@ The following mods contain large assets that significantly increase memory press
 Everest and Olympus are excellent tools for managing Celeste mods. However, there are still some quality-of-life improvements that could be made:
 
 - Olympus is unstable or completely non-functional on certain Linux distributions, particularly in **Wayland** environments.
-- Download speed is slow in some countries.
+- Download speed is slow in some regions.
   - CLI tools like `curl` or `wget` are sometimes faster than in-game downloads.
   - Cannot run auto updates on background.
-  - Need to wait or entirely cancel the updates when opening the game.
-- No option to *cancel*, *pause*, or *resume* downloads in the in-game mod menu to resolve missing dependencies.
+  - Need to wait or entirely cancel the updates while opening the game.
+- No options to *cancel*, *pause*, or *resume* downloads in the in-game mod menu when resolving missing dependencies.
 - Lack of clarity about `dependencies` when uninstalling mods.
 
 ---
