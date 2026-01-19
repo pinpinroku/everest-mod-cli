@@ -91,7 +91,7 @@ async fn run() -> anyhow::Result<()> {
                 .collect();
 
             // Fetch metadata
-            let downloader = Downloader::new(60, 4);
+            let downloader = Downloader::new(60, args.jobs as usize);
             let spinner = download::create_spinner();
             let (reg_bytes, graph_bytes) = tokio::try_join!(
                 downloader.fetch_database(DatabaseKind::Update, &config),
@@ -147,7 +147,7 @@ async fn run() -> anyhow::Result<()> {
             let cache_db = cache::sync(&config).context("failed to sync file cache")?;
 
             // fetch metadata
-            let downloader = Downloader::new(60, 4);
+            let downloader = Downloader::new(60, args.jobs as usize);
             let spinner = download::create_spinner();
             let bytes = downloader
                 .fetch_database(DatabaseKind::Update, &config)

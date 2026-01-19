@@ -77,6 +77,10 @@ pub struct Cli {
     #[arg(long)]
     pub use_api_mirror: bool,
 
+    /// The limit for concurrent downloads (1 to 6).
+    #[arg(short, long, default_value_t = 4, value_parser = clap::value_parser!(u8).range(1..=6))]
+    pub jobs: u8,
+
     /// Verbose mode.
     #[arg(short, long)]
     pub verbose: bool,
