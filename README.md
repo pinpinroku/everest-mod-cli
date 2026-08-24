@@ -1,12 +1,6 @@
 # hultra
 
-A commandline installer and updater for Celeste mods.
-
-**This is major version update (v4.0.0) from everest-mod-cli v3.2.2**
-- Introduces a lot of breaking changes
-- Increases code readability, maintability, and scalaiblity
-- Huge performance improvements
-> See [CHANGELOG.md](https://github.com/pinpinroku/hultra/CHANGELOG.md) for more information
+A command-line installer and updater for Celeste mods on Linux.
 
 ---
 
