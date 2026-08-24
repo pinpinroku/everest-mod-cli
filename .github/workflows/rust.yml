@@ -34,13 +34,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    
     steps:
       - uses: actions/checkout@v7
-      
+      - name: Update Rust
+        run: rustup update stable
       - name: Build release binary
         run: cargo build --release --locked
-
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
